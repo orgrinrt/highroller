@@ -1,0 +1,11 @@
+[package]
+name = "rolling_idx"
+authors = ["orgrinrt", "Hiisi Digital"]
+version = "0.1.0"
+edition = "2021"
+
+[lints]
+workspace = true
+
+[dependencies]
+lazy_static = "1.4.0"
