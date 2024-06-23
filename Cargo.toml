@@ -1,8 +1,37 @@
 [package]
 name = "highroller"
 authors = ["orgrinrt", "Hiisi Digital"]
-version = "0.1.0"
+version = "0.0.2"
 edition = "2021"
+description = """
+A simple, high-level rolling index that is thread-safe and guarantees cheap runtime-unique IDs.
+"""
+license = "MIT"
+license-file = "LICENSE"
+readme = "README.md"
+keywords = ["thread-safe", "id", "counter", "static", "ruid"]
+categories = ["asynchronous", "concurrency", "game-development", "rust-patterns"]
+documentation = "https://docs.rs/highroller"
+homepage = "https://github.com/orgrinrt/highroller"
+repository = "https://github.com/orgrinrt/highroller"
 
 [dependencies]
-lazy_static = "1.4.0"
+lazy_static = "1.5.0"
+
+[features]
+default = ["u16_index", "strict"]
+# select one for the size of the rolling index
+u8_index = []
+u16_index = []
+u32_index = []
+u64_index = []
+u128_index = []
+usize_index = []
+# actual features
+strict = []
+ruid_type = []
+allow_arithmetics = []
+# test suites
+test_suite_a = ["u8_index", "ruid_type", "allow_arithmetics"]
+test_suite_b = ["u32_index", "ruid_type", "allow_arithmetics"]
+test_suite_c = ["u16_index", "strict", "ruid_type", "allow_arithmetics"]
