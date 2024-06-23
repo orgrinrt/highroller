@@ -393,7 +393,8 @@ mod tests {
     // if I clear the poison when starting another test. The RUN_LOCK should ensure that the tests
     // run sequentially, and while two of the tests do intentional race conditions and other
     // threading problems, the .join() call there should ensure that *IF* any of the threads
-    // panicked, it would fail the test *before* we ever cleared the poison. This correct?
+    // panicked, it would fail the test *before* we ever cleared the poison.
+    // This correct?
 
     pub fn reset_rolling_idx() {
         _ROLLING_IDX.clear_poison();
