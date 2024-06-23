@@ -1,7 +1,8 @@
 #![doc = include_str!(concat!(env!("CARGO_MANIFEST_DIR"), "/", "README.md"))]
 
-use lazy_static::lazy_static;
 use std::sync::Mutex;
+
+use lazy_static::lazy_static;
 
 macro_rules! declare_rolling_idx {
     ($t:ty, $max_val:expr) => {
@@ -71,9 +72,9 @@ macro_rules! declare_rolling_idx {
         use std::marker::Copy;
 
         #[cfg(all(feature = "ruid_type", feature = "allow_arithmetics"))]
-        use std::ops::{Add, Div, Mul, Neg, Rem, Sub};
+        use std::ops::{Add, Div, Mul /*, Neg*/, Rem, Sub};
         #[cfg(all(feature = "ruid_type", feature = "allow_arithmetics"))]
-        use std::ops::{AddAssign, DivAssign, MulAssign, NegAssign, RemAssign, SubAssign};
+        use std::ops::{AddAssign, DivAssign, MulAssign, RemAssign, SubAssign};
 
         #[cfg(all(feature = "ruid_type"))]
         pub struct RUID {
@@ -181,16 +182,16 @@ macro_rules! declare_rolling_idx {
             }
         }
 
-        #[cfg(all(feature = "ruid_type", feature = "allow_arithmetics"))]
-        impl std::ops::Neg for RUID {
-            type Output = Self;
-
-            fn neg(self) -> Self::Output {
-                RUID {
-                    __value: -self.__value,
-                }
-            }
-        }
+        // #[cfg(all(feature = "ruid_type", feature = "allow_arithmetics"))]
+        // impl std::ops::Neg for RUID {
+        //     type Output = Self;
+        //
+        //     fn neg(self) -> Self::Output {
+        //         RUID {
+        //             __value: -self.__value,
+        //         }
+        //     }
+        // }
 
         #[cfg(all(feature = "ruid_type", feature = "allow_arithmetics"))]
         impl std::ops::Rem for RUID {
@@ -383,7 +384,16 @@ declare_rolling_idx!(usize, usize::MAX);
 #[cfg(test)]
 mod tests {
     use super::*;
+
     static RUN_LOCK: Mutex<bool> = Mutex::new(false);
+
+    // NEED INPUT:
+    // Re: the smelly poison clearings - My thinking is this:
+    // If an earlier test panicked, it would fail that test, so it does not matter that much
+    // if I clear the poison when starting another test. The RUN_LOCK should ensure that the tests
+    // run sequentially, and while two of the tests do intentional race conditions and other
+    // threading problems, the .join() call there should ensure that *IF* any of the threads
+    // panicked, it would fail the test *before* we ever cleared the poison. This correct?
 
     pub fn reset_rolling_idx() {
         _ROLLING_IDX.clear_poison();
@@ -393,123 +403,189 @@ mod tests {
 
     #[test]
     fn test_rolling_index_generation() {
-        let _lock = RUN_LOCK.lock().unwrap();
-        reset_rolling_idx();
+        let _lock_res = RUN_LOCK.lock();
+        let test_fn = || {
+            reset_rolling_idx();
 
-        let id1 = rolling_idx();
-        let id2 = rolling_idx();
+            let id1 = rolling_idx();
+            let id2 = rolling_idx();
 
-        assert_ne!(id1, id2, "Newly generated IDs should not be the same");
+            assert_ne!(id1, id2, "Newly generated IDs should not be the same");
+        };
+
+        match _lock_res {
+            Ok(lock_guard) => {
+                test_fn();
+            },
+            Err(poisoned_lock) => {
+                RUN_LOCK.clear_poison();
+                let lock_guard = poisoned_lock.into_inner();
+                test_fn();
+            },
+        }
     }
 
     #[test]
     fn test_rolling_index_linearity() {
-        let _lock = RUN_LOCK.lock().unwrap();
-        reset_rolling_idx();
+        let _lock_res = RUN_LOCK.lock();
+        let test_fn = || {
+            reset_rolling_idx();
 
-        let count: usize = 254;
-        let mut counts = Vec::new();
-        for i in 0..count {
-            counts.push(rolling_idx() as usize);
+            let count: usize = 254;
+            let mut counts = Vec::new();
+            for i in 0..count {
+                counts.push(rolling_idx() as usize);
+            }
+
+            assert_eq!(
+                counts.len(),
+                count,
+                "[vec len] {} == {} | Something is wrong with the rolling index stepping!",
+                counts.len(),
+                count
+            );
+        };
+
+        match _lock_res {
+            Ok(lock_guard) => {
+                test_fn();
+            },
+            Err(poisoned_lock) => {
+                RUN_LOCK.clear_poison();
+                let lock_guard = poisoned_lock.into_inner();
+                test_fn();
+            },
         }
-
-        assert_eq!(
-            counts.len(),
-            count,
-            "[vec len] {} == {} | Something is wrong with the \
-        rolling index stepping!",
-            counts.len(),
-            count
-        );
     }
 
     #[test]
     fn test_rolling_index_generation_multithreaded() {
-        let _lock = RUN_LOCK.lock().unwrap();
-        reset_rolling_idx();
+        let _lock_res = RUN_LOCK.lock();
+        let test_fn = || {
+            reset_rolling_idx();
 
-        use std::thread;
-        use std::time::Duration;
+            use std::thread;
+            use std::time::Duration;
 
-        let sleep_delays = [0, 0, 0, 10, 20, 30, 40, 50, 60, 70, 80, 90]; // in milliseconds
-        let children: Vec<_> = (0..1000)
-            .map(|i| {
-                let delay = sleep_delays[i % sleep_delays.len()];
-                thread::Builder::new()
-                    .name(format!("test_thread_{}", i))
-                    .spawn(move || {
-                        thread::sleep(Duration::from_millis(delay as u64));
-                        rolling_idx()
-                    })
-                    .unwrap()
-            })
-            .collect();
+            let sleep_delays = [0, 0, 0, 10, 20, 30, 40, 50, 60, 70, 80, 90]; // in milliseconds
+            let children: Vec<_> = (0..1000)
+                .map(|i| {
+                    let delay = sleep_delays[i % sleep_delays.len()];
+                    thread::Builder::new()
+                        .name(format!("test_thread_{}", i))
+                        .spawn(move || {
+                            thread::sleep(Duration::from_millis(delay as u64));
+                            rolling_idx()
+                        })
+                        .unwrap()
+                })
+                .collect();
 
-        let mut ids = Vec::new();
-        for (i, child) in children.into_iter().enumerate() {
-            match child.join() {
-                Ok(id) => {
-                    assert!(
-                        !ids.contains(&id),
-                        "Newly generated ID was the same as a previous one"
-                    );
-                    ids.push(id);
-                },
-                Err(_) => {
-                    eprintln!("Thread {} panicked", i);
-                    panic!();
-                },
+            let mut ids = Vec::new();
+            for (i, child) in children.into_iter().enumerate() {
+                match child.join() {
+                    Ok(id) => {
+                        assert!(
+                            !ids.contains(&id),
+                            "Newly generated ID was the same as a previous one"
+                        );
+                        ids.push(id);
+                    },
+                    Err(err) => {
+                        println!("{:?}", err);
+                        eprintln!("Thread {} panicked", i);
+                        panic!();
+                    },
+                }
             }
+        };
+
+        match _lock_res {
+            Ok(lock_guard) => {
+                test_fn();
+            },
+            Err(poisoned_lock) => {
+                RUN_LOCK.clear_poison();
+                let lock_guard = poisoned_lock.into_inner();
+                test_fn();
+            },
         }
     }
 
     #[test]
-    #[cfg(all(feature = "ruid_type"))]
+    #[cfg(feature = "ruid_type")]
     fn test_ruid_generation() {
-        let _lock = RUN_LOCK.lock().unwrap();
-        reset_rolling_idx();
+        let _lock_res = RUN_LOCK.lock();
+        let test_fn = || {
+            reset_rolling_idx();
 
-        let id1 = RUID::new();
-        let id2 = RUID::new();
+            let id1 = RUID::new();
+            let id2 = RUID::new();
 
-        assert_ne!(id1, id2, "Newly generated IDs should not be the same");
+            assert_ne!(id1, id2, "Newly generated IDs should not be the same");
+        };
+
+        match _lock_res {
+            Ok(lock_guard) => {
+                test_fn();
+            },
+            Err(poisoned_lock) => {
+                RUN_LOCK.clear_poison();
+                let lock_guard = poisoned_lock.into_inner();
+                test_fn();
+            },
+        }
     }
 
     #[test]
-    #[cfg(all(feature = "ruid_type"))]
+    #[cfg(feature = "ruid_type")]
     fn test_ruid_generation_multithreaded() {
-        let _lock = RUN_LOCK.lock().unwrap();
-        reset_rolling_idx();
+        let _lock_res = RUN_LOCK.lock();
+        let test_fn = || {
+            reset_rolling_idx();
 
-        use std::thread;
-        use std::time::Duration;
+            use std::thread;
+            use std::time::Duration;
 
-        let sleep_delays = [0, 0, 0, 10, 20, 30, 40, 50, 60, 70, 80, 90]; // in milliseconds
-        let children: Vec<_> = (0..1000)
-            .map(|i| {
-                let delay = sleep_delays[i % sleep_delays.len()];
-                thread::spawn(move || {
-                    thread::sleep(Duration::from_millis(delay as u64));
-                    RUID::new()
+            let sleep_delays = [0, 0, 0, 10, 20, 30, 40, 50, 60, 70, 80, 90]; // in milliseconds
+            let children: Vec<_> = (0..1000)
+                .map(|i| {
+                    let delay = sleep_delays[i % sleep_delays.len()];
+                    thread::spawn(move || {
+                        thread::sleep(Duration::from_millis(delay as u64));
+                        RUID::new()
+                    })
                 })
-            })
-            .collect();
+                .collect();
 
-        let mut ids = Vec::new();
-        for (i, child) in children.into_iter().enumerate() {
-            match child.join() {
-                Ok(id) => {
-                    assert!(
-                        !ids.contains(&id),
-                        "Newly generated ID was the same as a previous one"
-                    );
-                    ids.push(id);
-                },
-                Err(_) => {
-                    eprintln!("Thread {} panicked", i);
-                    panic!();
-                },
+            let mut ids = Vec::new();
+            for (i, child) in children.into_iter().enumerate() {
+                match child.join() {
+                    Ok(id) => {
+                        assert!(
+                            !ids.contains(&id),
+                            "Newly generated ID was the same as a previous one"
+                        );
+                        ids.push(id);
+                    },
+                    Err(err) => {
+                        println!("{:?}", err);
+                        eprintln!("Thread {} panicked", i);
+                        panic!();
+                    },
+                }
             }
+        };
+
+        match _lock_res {
+            Ok(lock_guard) => {
+                test_fn();
+            },
+            Err(poisoned_lock) => {
+                RUN_LOCK.clear_poison();
+                let lock_guard = poisoned_lock.into_inner();
+                test_fn();
+            },
         }
     }
 
@@ -517,10 +593,24 @@ mod tests {
     #[should_panic]
     #[cfg(all(feature = "strict", feature = "u8_index"))]
     fn test_u8_overflow_panic() {
-        let _lock = RUN_LOCK.lock().unwrap();
-        reset_rolling_idx();
-        for _ in 0..300 {
-            let _ = rolling_idx();
+        let _lock_res = RUN_LOCK.lock();
+        let test_fn = || {
+            reset_rolling_idx();
+            for _ in 0..300 {
+                let _ = rolling_idx();
+            }
+            RUN_LOCK.clear_poison();
+        };
+
+        match _lock_res {
+            Ok(lock_guard) => {
+                test_fn();
+            },
+            Err(poisoned_lock) => {
+                RUN_LOCK.clear_poison();
+                let lock_guard = poisoned_lock.into_inner();
+                test_fn();
+            },
         }
     }
 
@@ -528,10 +618,24 @@ mod tests {
     #[should_panic]
     #[cfg(all(feature = "strict", feature = "u16_index"))]
     fn test_u16_overflow_panic() {
-        let _lock = RUN_LOCK.lock().unwrap();
-        reset_rolling_idx();
-        for _ in 0..70_000 {
-            let _ = rolling_idx();
+        let _lock_res = RUN_LOCK.lock();
+        let test_fn = || {
+            reset_rolling_idx();
+            for _ in 0..70_000 {
+                let _ = rolling_idx();
+            }
+            RUN_LOCK.clear_poison();
+        };
+
+        match _lock_res {
+            Ok(lock_guard) => {
+                test_fn();
+            },
+            Err(poisoned_lock) => {
+                RUN_LOCK.clear_poison();
+                let lock_guard = poisoned_lock.into_inner();
+                test_fn();
+            },
         }
     }
 
@@ -558,55 +662,81 @@ mod tests {
     #[test]
     #[cfg(all(feature = "ruid_type", feature = "allow_arithmetics"))]
     fn test_arithmetic_operations_ruids() {
-        let _lock = RUN_LOCK.lock().unwrap();
-        reset_rolling_idx();
+        let _lock_res = RUN_LOCK.lock();
+        let test_fn = || {
+            reset_rolling_idx();
 
-        let mut id1 = RUID::new();
-        let mut id2 = RUID::new();
+            let mut id1 = RUID::new();
+            let mut id2 = RUID::new();
 
-        id1.__value = 6; // Use fallback values for testing
-        id2.__value = 3;
+            id1.__value = 6; // Use fallback values for testing
+            id2.__value = 3;
 
-        let sum = id1 + id2;
-        assert_eq!(sum.__value, 9, "Sum does not match");
+            let sum = id1 + id2;
+            assert_eq!(sum.__value, 9, "Sum does not match");
 
-        let diff = id1 - id2;
-        assert_eq!(diff.__value, 3, "Difference does not match");
+            let diff = id1 - id2;
+            assert_eq!(diff.__value, 3, "Difference does not match");
 
-        let product = id1 * id2;
-        assert_eq!(product.__value, 18, "Product does not match");
+            let product = id1 * id2;
+            assert_eq!(product.__value, 18, "Product does not match");
 
-        let quotient = id1 / id2;
-        assert_eq!(quotient.__value, 2, "Quotient does not match");
+            let quotient = id1 / id2;
+            assert_eq!(quotient.__value, 2, "Quotient does not match");
 
-        let remainder = id1 % id2;
-        assert_eq!(remainder.__value, 0, "Remainder does not match");
+            let remainder = id1 % id2;
+            assert_eq!(remainder.__value, 0, "Remainder does not match");
+        };
+
+        match _lock_res {
+            Ok(lock_guard) => {
+                test_fn();
+            },
+            Err(poisoned_lock) => {
+                RUN_LOCK.clear_poison();
+                let lock_guard = poisoned_lock.into_inner();
+                test_fn();
+            },
+        }
     }
 
     #[test]
     #[cfg(all(feature = "ruid_type", feature = "allow_arithmetics", not(feature = "strict")))]
     fn test_arithmetic_operations_mixed() {
-        let _lock = RUN_LOCK.lock().unwrap();
-        reset_rolling_idx();
+        let _lock_res = RUN_LOCK.lock();
+        let test_fn = || {
+            reset_rolling_idx();
 
-        let mut id1 = RUID::new();
-        let i = 2;
+            let mut id1 = RUID::new();
+            let i = 2;
 
-        id1.__value = 6; // Use fallback value for testing
+            id1.__value = 6; // Use fallback value for testing
 
-        let sum = id1 + i;
-        assert_eq!(sum.__value, 8, "Sum does not match");
+            let sum = id1 + i;
+            assert_eq!(sum.__value, 8, "Sum does not match");
 
-        let diff = id1 - i;
-        assert_eq!(diff.__value, 4, "Difference does not match");
+            let diff = id1 - i;
+            assert_eq!(diff.__value, 4, "Difference does not match");
 
-        let product = id1 * i;
-        assert_eq!(product.__value, 12, "Product does not match");
+            let product = id1 * i;
+            assert_eq!(product.__value, 12, "Product does not match");
 
-        let quotient = id1 / i;
-        assert_eq!(quotient.__value, 3, "Quotient does not match");
+            let quotient = id1 / i;
+            assert_eq!(quotient.__value, 3, "Quotient does not match");
 
-        let remainder = id1 % i;
-        assert_eq!(remainder.__value, 0, "Remainder does not match");
+            let remainder = id1 % i;
+            assert_eq!(remainder.__value, 0, "Remainder does not match");
+        };
+
+        match _lock_res {
+            Ok(lock_guard) => {
+                test_fn();
+            },
+            Err(poisoned_lock) => {
+                RUN_LOCK.clear_poison();
+                let lock_guard = poisoned_lock.into_inner();
+                test_fn();
+            },
+        }
     }
 }
