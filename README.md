@@ -5,7 +5,7 @@ highroller
 [![GitHub Stars](https://img.shields.io/github/stars/orgrinrt/highroller.svg)](https://github.com/orgrinrt/highroller/stargazers) 
 [![Crates.io Total Downloads](https://img.shields.io/crates/d/highroller)](https://crates.io/crates/highroller)
 [![GitHub Issues](https://img.shields.io/github/issues/orgrinrt/highroller.svg)](https://github.com/orgrinrt/highroller/issues) 
-[![Current Version](https://img.shields.io/badge/version-0.0.1-orange.svg)](https://github.com/orgrinrt/highroller) 
+[![Current Version](https://img.shields.io/badge/version-0.1.0-orange.svg)](https://github.com/orgrinrt/highroller) 
 
 >A simple, high-level rolling index that is thread-safe and guarantees cheap runtime-unique IDs.
 
