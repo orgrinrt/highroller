@@ -15,9 +15,7 @@ macro_rules! __rolling_idx_fn {
         "#]
         #[doc =  $doc]
         pub fn rolling_idx() -> $t {
-
             $pre
-
             let val: $t = {
                 let mut this = $crate::_ROLLING_IDX.lock().unwrap();
                 if *this == $max_val {
@@ -41,7 +39,6 @@ macro_rules! __rolling_idx_fn {
         #[doc =  $doc]
         // FIXME: we can't access the static _ROLLING_IDX api in const because mutex api isnt const
         pub /*const*/ fn rolling_idx() -> $t {
-
             $pre
             let val: $t = {
                 let mut this = $crate::_ROLLING_IDX.lock().unwrap();
