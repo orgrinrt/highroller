@@ -14,7 +14,7 @@ macro_rules! __rolling_idx_fn {
         pub fn rolling_idx() -> $t {
             $pre
             let val: $t = {
-                let mut this = crate::_ROLLING_IDX.lock().unwrap();
+                let mut this = $crate::_ROLLING_IDX.lock().unwrap();
                 if *this == $max_val {
                     $i
                 }
@@ -29,7 +29,7 @@ macro_rules! __rolling_idx_fn {
         pub const fn rolling_idx() -> $t {
             $pre
             let val: $t = {
-                let mut this = crate::_ROLLING_IDX.lock().unwrap();
+                let mut this = $crate::_ROLLING_IDX.lock().unwrap();
                 if *this == $max_val {
                     $i
                 }
