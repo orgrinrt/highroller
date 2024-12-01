@@ -11,7 +11,15 @@ panic!(
 #[macro_export]
 macro_rules! __rolling_idx_fn {
     (!c, $t:ty, $max_val:expr, $doc:expr, pre $pre:block, inner { $i:expr }) => {
-        /// $doc
+
+        #[doc = r#"
+            Returns the current rolling index and then increases it by 1.
+            \n
+            The rolling index is ephemeral and runtime-specific,
+            meaning it is reset every time the application starts.
+            \n
+        "#]
+        #[doc =  $doc]
         pub fn rolling_idx() -> $t {
             $pre
             let val: $t = {
@@ -51,11 +59,6 @@ macro_rules! declare_rolling_idx {
             static ref _ROLLING_IDX: Mutex<$t> = Mutex::new(0);
         }
 
-        /// Returns the current rolling index and then increases it by 1.
-        ///
-        /// The rolling index is ephemeral and runtime-specific,
-        /// meaning it is reset every time the application starts.
-        ///
         #[cfg(all(feature = "strict", not(feature = "const")))]
         $crate::__rolling_idx_fn!(!c, $t, $max_val,
         "NOTE: The feature flag `strict` *is* enabled, so on overflow, this will panic.",
