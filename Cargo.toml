@@ -36,5 +36,5 @@ async = []
 # test suites
 test_suite_a = ["u8_index", "ruid_type", "async", "allow_arithmetics"]
 test_suite_b = ["u32_index", "ruid_type", "const", "allow_arithmetics"]
-test_suite_c = ["u16_index", "strict", "ruid_type", "const", "async", "allow_arithmetics"]
+test_suite_c = ["u16_index", "strict", "ruid_type", "const", "async"]
 test_suite_d = ["u64_index", "strict", "ruid_type", "allow_arithmetics"]
