@@ -1,13 +1,8 @@
 #![doc = include_str!(concat!(env!("CARGO_MANIFEST_DIR"), "/", "README.md"))]
 
+use lazy_static::lazy_static;
 use std::sync::Mutex;
 
-use lazy_static::lazy_static;
-#[cfg(not(feature = "strict"))]
-panic!(
-    "This should not be able to be called, flags set incorrectly (inform the \
-            maintainer)"
-);
 #[macro_export]
 macro_rules! __rolling_idx_fn {
     (!c, $t:ty, $max_val:expr, $doc:expr, pre $pre:block, inner { $i:expr }) => {
@@ -21,7 +16,9 @@ macro_rules! __rolling_idx_fn {
         "#]
         #[doc =  $doc]
         pub fn rolling_idx() -> $t {
+
             $pre
+
             let val: $t = {
                 let mut this = $crate::_ROLLING_IDX.lock().unwrap();
                 if *this == $max_val {
@@ -35,8 +32,17 @@ macro_rules! __rolling_idx_fn {
         }
     };
     (c, $t:ty, $max_val:expr, $doc:expr, pre $pre:block, inner { $i:expr }) => {
-        /// $doc
-        pub const fn rolling_idx() -> $t {
+        #[doc = r#"
+            Returns the current rolling index and then increases it by 1.
+            \n
+            The rolling index is ephemeral and runtime-specific,
+            meaning it is reset every time the application starts.
+            \n
+        "#]
+        #[doc =  $doc]
+        // FIXME: we can't access the static _ROLLING_IDX api in const because mutex api isnt const
+        pub /*const*/ fn rolling_idx() -> $t {
+
             $pre
             let val: $t = {
                 let mut this = $crate::_ROLLING_IDX.lock().unwrap();
@@ -54,7 +60,7 @@ macro_rules! __rolling_idx_fn {
 
 macro_rules! declare_rolling_idx {
     ($t:ty, $max_val:expr) => {
-        lazy_static! {
+        lazy_static::lazy_static! {
             /// The rolling index. This is increased with each call to `rolling_idx`.
             static ref _ROLLING_IDX: Mutex<$t> = Mutex::new(0);
         }
@@ -155,13 +161,24 @@ macro_rules! declare_rolling_idx {
                     __value: $crate::rolling_idx(),
                 }
             }
+            #[inline]
+            pub fn get(&self) -> $t {
+                self.__value
+            }
         }
         #[cfg(all(feature = "ruid_type", feature = "const"))]
         impl RUID {
             pub const fn new() -> Self {
                 RUID {
-                    __value: $crate::rolling_idx(),
+                    __value: 0,
                 }
+            }
+            #[inline]
+            pub fn get(&self) -> $t {
+                if self.__value == 0 {
+                    $crate::rolling_idx()
+                }
+                self.__value
             }
         }
 
@@ -183,15 +200,16 @@ macro_rules! declare_rolling_idx {
 
         #[cfg(all(feature = "ruid_type"))]
         impl Deref for RUID {
-            fn deref(&self) -> &Self::__value {
-                &self.__value
+            type Target = $t;
+            fn deref(&self) -> &$t {
+                &self.get()
             }
         }
 
         #[cfg(all(feature = "ruid_type"))]
         impl PartialEq for RUID {
             fn eq(&self, other: &Self) -> bool {
-                self.__value == other.__value
+                self.get() == other.__value
             }
         }
 
@@ -201,28 +219,28 @@ macro_rules! declare_rolling_idx {
         #[cfg(all(feature = "ruid_type"))]
         impl PartialOrd for RUID {
             fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
-                self.__value.partial_cmp(&other.__value)
+                self.get().partial_cmp(&other.__value)
             }
         }
 
         #[cfg(all(feature = "ruid_type"))]
         impl Ord for RUID {
             fn cmp(&self, other: &Self) -> std::cmp::Ordering {
-                self.__value.cmp(&other.__value)
+                self.get().cmp(&other.__value)
             }
         }
 
         #[cfg(all(feature = "ruid_type", not(feature = "strict")))]
         impl PartialEq<$t> for RUID {
             fn eq(&self, other: &$t) -> bool {
-                self.__value == *other
+                self.get() == *other
             }
         }
 
         #[cfg(all(feature = "ruid_type", not(feature = "strict")))]
         impl PartialOrd<$t> for RUID {
             fn partial_cmp(&self, other: &$t) -> Option<std::cmp::Ordering> {
-                self.__value.partial_cmp(other)
+                self.get().partial_cmp(other)
             }
         }
 
@@ -232,7 +250,7 @@ macro_rules! declare_rolling_idx {
 
             fn add(self, other: Self) -> Self {
                 RUID {
-                    __value: self.__value + other.__value,
+                    __value: self.get() + other.__value,
                 }
             }
         }
@@ -243,7 +261,7 @@ macro_rules! declare_rolling_idx {
 
             fn sub(self, other: Self) -> Self {
                 RUID {
-                    __value: self.__value - other.__value,
+                    __value: self.get() - other.__value,
                 }
             }
         }
@@ -254,7 +272,7 @@ macro_rules! declare_rolling_idx {
 
             fn mul(self, other: Self) -> Self {
                 RUID {
-                    __value: self.__value * other.__value,
+                    __value: self.get() * other.__value,
                 }
             }
         }
@@ -265,7 +283,7 @@ macro_rules! declare_rolling_idx {
 
             fn div(self, other: Self) -> Self {
                 RUID {
-                    __value: self.__value / other.__value,
+                    __value: self.get() / other.__value,
                 }
             }
         }
@@ -276,7 +294,7 @@ macro_rules! declare_rolling_idx {
         //
         //     fn neg(self) -> Self::Output {
         //         RUID {
-        //             __value: -self.__value,
+        //             __value: -self.get(),
         //         }
         //     }
         // }
@@ -287,7 +305,7 @@ macro_rules! declare_rolling_idx {
 
             fn rem(self, other: Self) -> Self {
                 RUID {
-                    __value: self.__value % other.__value,
+                    __value: self.get() % other.__value,
                 }
             }
         }
@@ -295,35 +313,35 @@ macro_rules! declare_rolling_idx {
         #[cfg(all(feature = "ruid_type", feature = "allow_arithmetics"))]
         impl std::ops::AddAssign for RUID {
             fn add_assign(&mut self, other: Self) {
-                self.__value += other.__value;
+                self.get() += other.__value;
             }
         }
 
         #[cfg(all(feature = "ruid_type", feature = "allow_arithmetics"))]
         impl std::ops::SubAssign for RUID {
             fn sub_assign(&mut self, other: Self) {
-                self.__value -= other.__value;
+                self.get() -= other.__value;
             }
         }
 
         #[cfg(all(feature = "ruid_type", feature = "allow_arithmetics"))]
         impl std::ops::MulAssign for RUID {
             fn mul_assign(&mut self, other: Self) {
-                self.__value *= other.__value;
+                self.get() *= other.__value;
             }
         }
 
         #[cfg(all(feature = "ruid_type", feature = "allow_arithmetics"))]
         impl std::ops::DivAssign for RUID {
             fn div_assign(&mut self, other: Self) {
-                self.__value /= other.__value;
+                self.get() /= other.__value;
             }
         }
 
         #[cfg(all(feature = "ruid_type", feature = "allow_arithmetics"))]
         impl std::ops::RemAssign for RUID {
             fn rem_assign(&mut self, other: Self) {
-                self.__value %= other.__value;
+                self.get() %= other.__value;
             }
         }
 
@@ -333,7 +351,7 @@ macro_rules! declare_rolling_idx {
 
             fn add(self, other: $t) -> Self {
                 RUID {
-                    __value: self.__value + other,
+                    __value: self.get() + other,
                 }
             }
         }
@@ -344,7 +362,7 @@ macro_rules! declare_rolling_idx {
 
             fn sub(self, other: $t) -> Self {
                 RUID {
-                    __value: self.__value - other,
+                    __value: self.get() - other,
                 }
             }
         }
@@ -355,7 +373,7 @@ macro_rules! declare_rolling_idx {
 
             fn mul(self, other: $t) -> Self {
                 RUID {
-                    __value: self.__value * other,
+                    __value: self.get() * other,
                 }
             }
         }
@@ -366,7 +384,7 @@ macro_rules! declare_rolling_idx {
 
             fn div(self, other: $t) -> Self {
                 RUID {
-                    __value: self.__value / other,
+                    __value: self.get() / other,
                 }
             }
         }
@@ -377,7 +395,7 @@ macro_rules! declare_rolling_idx {
 
             fn rem(self, other: $t) -> Self {
                 RUID {
-                    __value: self.__value % other,
+                    __value: self.get() % other,
                 }
             }
         }
@@ -385,42 +403,42 @@ macro_rules! declare_rolling_idx {
         #[cfg(all(feature = "ruid_type", feature = "allow_arithmetics", not(feature = "strict")))]
         impl AddAssign<$t> for RUID {
             fn add_assign(&mut self, other: $t) {
-                self.__value += other;
+                self.get() += other;
             }
         }
 
         #[cfg(all(feature = "ruid_type", feature = "allow_arithmetics", not(feature = "strict")))]
         impl SubAssign<$t> for RUID {
             fn sub_assign(&mut self, other: $t) {
-                self.__value -= other;
+                self.get() -= other;
             }
         }
 
         #[cfg(all(feature = "ruid_type", feature = "allow_arithmetics", not(feature = "strict")))]
         impl MulAssign<$t> for RUID {
             fn mul_assign(&mut self, other: $t) {
-                self.__value *= other;
+                self.get() *= other;
             }
         }
 
         #[cfg(all(feature = "ruid_type", feature = "allow_arithmetics", not(feature = "strict")))]
         impl DivAssign<$t> for RUID {
             fn div_assign(&mut self, other: $t) {
-                self.__value /= other;
+                self.get() /= other;
             }
         }
 
         #[cfg(all(feature = "ruid_type", feature = "allow_arithmetics", not(feature = "strict")))]
         impl RemAssign<$t> for RUID {
             fn rem_assign(&mut self, other: $t) {
-                self.__value %= other;
+                self.get() %= other;
             }
         }
 
         #[cfg(all(feature = "ruid_type"))]
         impl Display for RUID {
             fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-                write!(f, "{}", self.__value)
+                write!(f, "{}", self.get())
             }
         }
 
@@ -428,7 +446,7 @@ macro_rules! declare_rolling_idx {
         impl Debug for RUID {
             fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
                 f.debug_struct("RUID")
-                    .field("value", &self.__value)
+                    .field("value", &self.get())
                     .finish()
             }
         }
@@ -445,7 +463,7 @@ macro_rules! declare_rolling_idx {
         #[cfg(all(feature = "ruid_type"))]
         impl Into<$t> for RUID {
             fn into(self) -> $t {
-                self.__value
+                self.get()
             }
         }
     };
@@ -472,6 +490,7 @@ declare_rolling_idx!(usize, usize::MAX);
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::sync::Mutex;
 
     static RUN_LOCK: Mutex<bool> = Mutex::new(false);
 
