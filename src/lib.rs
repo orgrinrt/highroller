@@ -10,7 +10,8 @@ panic!(
 );
 #[macro_export]
 macro_rules! __rolling_idx_fn {
-    (!c, $t:ty, $max_val:expr, pre $pre:block, inner { $i:expr }) => {
+    (!c, $t:ty, $max_val:expr, $doc:expr, pre $pre:block, inner { $i:expr }) => {
+        /// $doc
         pub fn rolling_idx() -> $t {
             $pre
             let val: $t = {
@@ -25,7 +26,8 @@ macro_rules! __rolling_idx_fn {
             val
         }
     };
-    (c, $t:ty, $max_val:expr, pre $pre:block, inner { $i:expr }) => {
+    (c, $t:ty, $max_val:expr, $doc:expr, pre $pre:block, inner { $i:expr }) => {
+        /// $doc
         pub const fn rolling_idx() -> $t {
             $pre
             let val: $t = {
@@ -55,8 +57,8 @@ macro_rules! declare_rolling_idx {
         /// meaning it is reset every time the application starts.
         ///
         #[cfg(all(feature = "strict", not(feature = "const")))]
-        /// NOTE: The feature flag `strict` *is* enabled, so on overflow, this will panic.
         $crate::__rolling_idx_fn!(!c, $t, $max_val,
+        "NOTE: The feature flag `strict` *is* enabled, so on overflow, this will panic.",
             pre {
                 #[cfg(not(feature = "strict"))]
                 panic!(
@@ -70,8 +72,8 @@ macro_rules! declare_rolling_idx {
         );
 
         #[cfg(all(not(feature = "strict"), not(feature = "const")))]
-        /// NOTE: The feature flag `strict` is *not* enabled, so on overflow, this will wrap.
         $crate::__rolling_idx_fn!(!c, $t, $max_val,
+            "NOTE: The feature flag `strict` is *not* enabled, so on overflow, this will wrap.",
             pre {
                 #[cfg(not(feature = "strict"))]
                 panic!(
@@ -85,8 +87,8 @@ macro_rules! declare_rolling_idx {
         );
 
         #[cfg(all(feature = "strict", feature = "const"))]
-        /// NOTE: The feature flag `strict` *is* enabled, so on overflow, this will panic.
         $crate::__rolling_idx_fn!(c, $t, $max_val,
+            "NOTE: The feature flag `strict` *is* enabled, so on overflow, this will panic.",
             pre {
                 #[cfg(not(feature = "strict"))]
                 panic!(
@@ -100,8 +102,8 @@ macro_rules! declare_rolling_idx {
         );
 
         #[cfg(all(not(feature = "strict"), feature = "const"))]
-        /// NOTE: The feature flag `strict` is *not* enabled, so on overflow, this will wrap.
         $crate::__rolling_idx_fn!(c, $t, $max_val,
+            "NOTE: The feature flag `strict` is *not* enabled, so on overflow, this will wrap.",
             pre {
                 #[cfg(not(feature = "strict"))]
                 panic!(
