@@ -1,6 +1,5 @@
 #![doc = include_str!(concat!(env!("CARGO_MANIFEST_DIR"), "/", "README.md"))]
 
-use lazy_static::lazy_static;
 use std::sync::Mutex;
 
 #[macro_export]
