@@ -3,6 +3,44 @@
 use std::sync::Mutex;
 
 use lazy_static::lazy_static;
+#[cfg(not(feature = "strict"))]
+panic!(
+    "This should not be able to be called, flags set incorrectly (inform the \
+            maintainer)"
+);
+#[macro_export]
+macro_rules! __rolling_idx_fn {
+    (!c, $t:ty, $max_val:expr, pre $pre:block, inner { $i:expr }) => {
+        pub fn rolling_idx() -> $t {
+            $pre
+            let val: $t = {
+                let mut this = crate::_ROLLING_IDX.lock().unwrap();
+                if *this == $max_val {
+                    $i
+                }
+                let _val = *this;
+                *this += 1;
+                _val
+            };
+            val
+        }
+    };
+    (c, $t:ty, $max_val:expr, pre $pre:block, inner { $i:expr }) => {
+        pub const fn rolling_idx() -> $t {
+            $pre
+            let val: $t = {
+                let mut this = crate::_ROLLING_IDX.lock().unwrap();
+                if *this == $max_val {
+                    $i
+                }
+                let _val = *this;
+                *this += 1;
+                _val
+            };
+            val
+        }
+    }
+}
 
 macro_rules! declare_rolling_idx {
     ($t:ty, $max_val:expr) => {
@@ -16,47 +54,65 @@ macro_rules! declare_rolling_idx {
         /// The rolling index is ephemeral and runtime-specific,
         /// meaning it is reset every time the application starts.
         ///
-        #[cfg(all(feature = "strict"))]
+        #[cfg(all(feature = "strict", not(feature = "const")))]
         /// NOTE: The feature flag `strict` *is* enabled, so on overflow, this will panic.
-        pub fn rolling_idx() -> $t {
-            #[cfg(not(feature = "strict"))]
-            panic!(
-                "This should not be able to be called, flags set incorrectly (inform the \
-            maintainer)"
-            );
+        $crate::__rolling_idx_fn!(!c, $t, $max_val,
+            pre {
+                #[cfg(not(feature = "strict"))]
+                panic!(
+                    "This should not be able to be called, flags set incorrectly (inform the \
+                maintainer)"
+                );
+            },
+            inner {
+                panic!("Overflow detected")
+            }
+        );
 
-            let val: $t = {
-                let mut this = crate::_ROLLING_IDX.lock().unwrap();
-                if *this == $max_val {
-                    panic!("Overflow detected");
-                }
-                let _val = *this;
-                *this += 1;
-                _val
-            };
-            val
-        }
-
-        #[cfg(not(feature = "strict"))]
+        #[cfg(all(not(feature = "strict"), not(feature = "const")))]
         /// NOTE: The feature flag `strict` is *not* enabled, so on overflow, this will wrap.
-        pub fn rolling_idx() -> $t {
-            #[cfg(all(feature = "strict"))]
-            panic!(
-                "This should not be able to be called, flags set incorrectly (inform the \
-            maintainer)"
-            );
+        $crate::__rolling_idx_fn!(!c, $t, $max_val,
+            pre {
+                #[cfg(not(feature = "strict"))]
+                panic!(
+                    "This should not be able to be called, flags set incorrectly (inform the \
+                maintainer)"
+                );
+            },
+            inner {
+                panic!("Overflow detected")
+            }
+        );
 
-            let val: $t = {
-                let mut this = crate::_ROLLING_IDX.lock().unwrap();
-                if *this == $max_val {
-                    *this = 0;
-                }
-                let _val = *this;
-                *this += 1;
-                _val
-            };
-            val
-        }
+        #[cfg(all(feature = "strict", feature = "const"))]
+        /// NOTE: The feature flag `strict` *is* enabled, so on overflow, this will panic.
+        $crate::__rolling_idx_fn!(c, $t, $max_val,
+            pre {
+                #[cfg(not(feature = "strict"))]
+                panic!(
+                    "This should not be able to be called, flags set incorrectly (inform the \
+                maintainer)"
+                );
+            },
+            inner {
+                panic!("Overflow detected")
+            }
+        );
+
+        #[cfg(all(not(feature = "strict"), feature = "const"))]
+        /// NOTE: The feature flag `strict` is *not* enabled, so on overflow, this will wrap.
+        $crate::__rolling_idx_fn!(c, $t, $max_val,
+            pre {
+                #[cfg(not(feature = "strict"))]
+                panic!(
+                    "This should not be able to be called, flags set incorrectly (inform the \
+                maintainer)"
+                );
+            },
+            inner {
+                panic!("Overflow detected")
+            }
+        );
 
         #[cfg(all(feature = "ruid_type"))]
         use std::clone::Clone;
@@ -70,6 +126,12 @@ macro_rules! declare_rolling_idx {
         use std::fmt::{Debug, Display};
         #[cfg(all(feature = "ruid_type"))]
         use std::marker::Copy;
+        #[cfg(all(feature = "ruid_type", feature = "async"))]
+        use core::marker::Send;
+        #[cfg(all(feature = "ruid_type", feature = "async"))]
+        use core::marker::Sync;
+        #[cfg(all(feature = "ruid_type"))]
+        use std::ops::Deref;
 
         #[cfg(all(feature = "ruid_type", feature = "allow_arithmetics"))]
         use std::ops::{Add, Div, Mul /*, Neg*/, Rem, Sub};
@@ -81,7 +143,7 @@ macro_rules! declare_rolling_idx {
             __value: $t,
         }
 
-        #[cfg(all(feature = "ruid_type"))]
+        #[cfg(all(feature = "ruid_type", not(feature = "const")))]
         impl RUID {
             pub fn new() -> Self {
                 RUID {
@@ -89,6 +151,20 @@ macro_rules! declare_rolling_idx {
                 }
             }
         }
+        #[cfg(all(feature = "ruid_type", feature = "const"))]
+        impl RUID {
+            pub const fn new() -> Self {
+                RUID {
+                    __value: $crate::rolling_idx(),
+                }
+            }
+        }
+
+        #[cfg(all(feature = "ruid_type", feature = "async"))]
+        unsafe impl Send for RUID {}
+        #[cfg(all(feature = "ruid_type", feature = "async"))]
+        unsafe impl Sync for RUID {}
+
 
         #[cfg(all(feature = "ruid_type"))]
         impl Copy for RUID {}
@@ -97,6 +173,13 @@ macro_rules! declare_rolling_idx {
         impl Clone for RUID {
             fn clone(&self) -> Self {
                 *self
+            }
+        }
+
+        #[cfg(all(feature = "ruid_type"))]
+        impl Deref for RUID {
+            fn deref(&self) -> &Self::__value {
+                &self.__value
             }
         }
 
