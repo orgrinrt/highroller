@@ -7,19 +7,26 @@ macro_rules! __rolling_idx_fn {
     (!c, $t:ty, $max_val:expr, $doc:expr, pre $pre:block, inner { $i:expr }) => {
 
         #[doc = r#"
-            Returns the current rolling index and then increases it by 1.
-            \n
-            The rolling index is ephemeral and runtime-specific,
-            meaning it is reset every time the application starts.
-            \n
-        "#]
+Returns the current rolling index and then increases it by 1.
+
+The rolling index is ephemeral and runtime-specific, meaning it is reset every time
+the application starts.
+"#]
         #[doc =  $doc]
         pub fn rolling_idx() -> $t {
             $pre
             let val: $t = {
                 let mut this = $crate::_ROLLING_IDX.lock().unwrap();
                 if *this == $max_val {
-                    $i
+                    #[cfg(feature = "strict")]
+                    {
+                        $i
+                    }
+                    // non-strict wraps back to the start of the range instead of panicking
+                    #[cfg(not(feature = "strict"))]
+                    {
+                        *this = 0;
+                    }
                 }
                 let _val = *this;
                 *this += 1;
@@ -30,12 +37,11 @@ macro_rules! __rolling_idx_fn {
     };
     (c, $t:ty, $max_val:expr, $doc:expr, pre $pre:block, inner { $i:expr }) => {
         #[doc = r#"
-            Returns the current rolling index and then increases it by 1.
-            \n
-            The rolling index is ephemeral and runtime-specific,
-            meaning it is reset every time the application starts.
-            \n
-        "#]
+Returns the current rolling index and then increases it by 1.
+
+The rolling index is ephemeral and runtime-specific, meaning it is reset every time
+the application starts.
+"#]
         #[doc =  $doc]
         // FIXME: we can't access the static _ROLLING_IDX api in const because mutex api isnt const
         pub /*const*/ fn rolling_idx() -> $t {
@@ -43,7 +49,15 @@ macro_rules! __rolling_idx_fn {
             let val: $t = {
                 let mut this = $crate::_ROLLING_IDX.lock().unwrap();
                 if *this == $max_val {
-                    $i
+                    #[cfg(feature = "strict")]
+                    {
+                        $i
+                    }
+                    // non-strict wraps back to the start of the range instead of panicking
+                    #[cfg(not(feature = "strict"))]
+                    {
+                        *this = 0;
+                    }
                 }
                 let _val = *this;
                 *this += 1;
@@ -80,7 +94,7 @@ macro_rules! declare_rolling_idx {
         $crate::__rolling_idx_fn!(!c, $t, $max_val,
             "NOTE: The feature flag `strict` is *not* enabled, so on overflow, this will wrap.",
             pre {
-                #[cfg(not(feature = "strict"))]
+                #[cfg(feature = "strict")]
                 panic!(
                     "This should not be able to be called, flags set incorrectly (inform the \
                 maintainer)"
@@ -110,7 +124,7 @@ macro_rules! declare_rolling_idx {
         $crate::__rolling_idx_fn!(c, $t, $max_val,
             "NOTE: The feature flag `strict` is *not* enabled, so on overflow, this will wrap.",
             pre {
-                #[cfg(not(feature = "strict"))]
+                #[cfg(feature = "strict")]
                 panic!(
                     "This should not be able to be called, flags set incorrectly (inform the \
                 maintainer)"
@@ -171,8 +185,15 @@ macro_rules! declare_rolling_idx {
             }
             #[inline]
             pub fn get(&self) -> $t {
+                self.__value
+            }
+            /// Assigns a rolling index if this `RUID` is still the const-constructed
+            /// placeholder, and returns the value. `new()` is `const`, so it cannot roll
+            /// an index itself; call this once the value is reachable mutably.
+            #[inline]
+            pub fn assign(&mut self) -> $t {
                 if self.__value == 0 {
-                    $crate::rolling_idx()
+                    self.__value = $crate::rolling_idx();
                 }
                 self.__value
             }
@@ -198,7 +219,7 @@ macro_rules! declare_rolling_idx {
         impl Deref for RUID {
             type Target = $t;
             fn deref(&self) -> &$t {
-                &self.get()
+                &self.__value
             }
         }
 
@@ -309,35 +330,35 @@ macro_rules! declare_rolling_idx {
         #[cfg(all(feature = "ruid_type", feature = "allow_arithmetics"))]
         impl std::ops::AddAssign for RUID {
             fn add_assign(&mut self, other: Self) {
-                self.get() += other.__value;
+                self.__value += other.__value;
             }
         }
 
         #[cfg(all(feature = "ruid_type", feature = "allow_arithmetics"))]
         impl std::ops::SubAssign for RUID {
             fn sub_assign(&mut self, other: Self) {
-                self.get() -= other.__value;
+                self.__value -= other.__value;
             }
         }
 
         #[cfg(all(feature = "ruid_type", feature = "allow_arithmetics"))]
         impl std::ops::MulAssign for RUID {
             fn mul_assign(&mut self, other: Self) {
-                self.get() *= other.__value;
+                self.__value *= other.__value;
             }
         }
 
         #[cfg(all(feature = "ruid_type", feature = "allow_arithmetics"))]
         impl std::ops::DivAssign for RUID {
             fn div_assign(&mut self, other: Self) {
-                self.get() /= other.__value;
+                self.__value /= other.__value;
             }
         }
 
         #[cfg(all(feature = "ruid_type", feature = "allow_arithmetics"))]
         impl std::ops::RemAssign for RUID {
             fn rem_assign(&mut self, other: Self) {
-                self.get() %= other.__value;
+                self.__value %= other.__value;
             }
         }
 
@@ -399,35 +420,35 @@ macro_rules! declare_rolling_idx {
         #[cfg(all(feature = "ruid_type", feature = "allow_arithmetics", not(feature = "strict")))]
         impl AddAssign<$t> for RUID {
             fn add_assign(&mut self, other: $t) {
-                self.get() += other;
+                self.__value += other;
             }
         }
 
         #[cfg(all(feature = "ruid_type", feature = "allow_arithmetics", not(feature = "strict")))]
         impl SubAssign<$t> for RUID {
             fn sub_assign(&mut self, other: $t) {
-                self.get() -= other;
+                self.__value -= other;
             }
         }
 
         #[cfg(all(feature = "ruid_type", feature = "allow_arithmetics", not(feature = "strict")))]
         impl MulAssign<$t> for RUID {
             fn mul_assign(&mut self, other: $t) {
-                self.get() *= other;
+                self.__value *= other;
             }
         }
 
         #[cfg(all(feature = "ruid_type", feature = "allow_arithmetics", not(feature = "strict")))]
         impl DivAssign<$t> for RUID {
             fn div_assign(&mut self, other: $t) {
-                self.get() /= other;
+                self.__value /= other;
             }
         }
 
         #[cfg(all(feature = "ruid_type", feature = "allow_arithmetics", not(feature = "strict")))]
         impl RemAssign<$t> for RUID {
             fn rem_assign(&mut self, other: $t) {
-                self.get() %= other;
+                self.__value %= other;
             }
         }
 
