@@ -33,27 +33,31 @@ The function `rolling_idx()` returns the current index value. After retrieving, 
 > Please note that the rolling index is runtime-specific and is reset every time your application starts. 
  
 The rolling index is also thread-safe, meaning you can access it from multiple threads simultaneously without 
-encountering issues related to concurrent data access*.
-
-<small>*Pending more robust testing, should hold true. </small>
+encountering issues related to concurrent data access. This is exercised by the crate's test suite, which spawns
+1000 threads calling `rolling_idx()` concurrently and asserts every returned ID is unique.
 
 ### Feature Flags
 
 `highroller` provides several feature flags for flexibility.
 
-| Feature Flag          | Default    | Description                                                                                                                                                             |
-|-----------------------|------------|-------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
-| `strict`              | *Enabled*  | Panics on overflow and disables `RUID` - numeric type comparisons and <br/>arithmetics. *(When disabled, overflow will wrap instead)*                                   |
-| `ruid_type`           | *Disabled* | Enables Rolling Unique ID (`RUID`) type, a wrapper over the rolling index                                                                                               |
-| `allow_arithmetics`   | *Disabled* | Optional support for arithmetic operations on `RUID` *(note that without `strict` enabled, you should know what you are doing, since it can cause ambiguous behaviour)* |
-| size (separate flags) | `u16_index` | Choose the size of the rolling index: `u8_index`, `u16_index`, `u32_index`, `u64_index`, `u128_index`, `usize_index`                                                    |
+| Feature Flag           | Default     | Description                                                                                                                                                             |
+|------------------------|-------------|---------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| `strict`               | *Enabled*   | Panics on overflow. Disables comparisons and arithmetic operations between `RUID` and its underlying numeric type. *(When disabled, overflow wraps instead.)*         |
+| `ruid_type`            | *Disabled*  | Enables Rolling Unique ID (`RUID`) type, a wrapper over the rolling index. *(Currently fails to compile, see the "RUID" section below.)*                              |
+| `allow_arithmetics`    | *Disabled*  | Optional support for arithmetic operations on `RUID` *(note that without `strict` enabled, you should know what you are doing, since it can cause ambiguous behaviour)* |
+| `const`                | *Disabled*  | Makes `RUID::new()` a `const fn`. *(Experimental: `RUID` values created this way do not currently roll to a unique index.)*                                            |
+| `async`                | *Disabled*  | Marks `RUID` as `Send` and `Sync` explicitly, for use across thread boundaries                                                                                         |
+| size (separate flags)  | `u16_index` | Choose the size of the rolling index: `u8_index`, `u16_index`, `u32_index`, `u64_index`, `u128_index`, `usize_index`                                                   |
 
 If you need a particular rolling index size, or if you want to implement more explicit typing with `RUID`, enable the features according to your use case. The `strict` feature will help you catch overflows, where as the `allow_arithmetics` flag expands `RUID` functionality to support arithmetic operations.
 
 ### RUID
-"Rolling Unique ID" (RUID) is essentially a wrapper over the rolling index, with optional support for arithmetic 
+"Rolling Unique ID" (RUID) is a wrapper over the rolling index, with optional support for arithmetic 
 operations, and complete equivalence relation methods and display methods. You can use the `ruid_type` feature flag 
 to enable `RUID` and use it in your program. [Read more about `RUID` at the "Extras" section](#extras).
+
+> The `ruid_type` feature currently fails to compile (`impl Deref for RUID` returns a reference to a
+> temporary value). Enabling it breaks the build until this is fixed.
 
 
 ## Example
@@ -66,12 +70,12 @@ That's where you can take advantage of `highroller` to assign unique identifiers
 ```rust
 use std::sync::{Arc, Mutex};
 use std::thread;
-use rand::Rng;
 
+#[derive(Clone)]
 struct Fighter {
-  id: u8,
+  id: u16,
   power: u32,
-};
+}
 
 // create a register for fighters
 let fighters_register = Arc::new(Mutex::new(Vec::new()));
@@ -79,17 +83,17 @@ let fighters_register = Arc::new(Mutex::new(Vec::new()));
 // create four threads as four different arenas
 let arenas = 4;
 
-// first, gather a randomized set of 20 fighters (power randomized) for each arena
+// gather 20 fighters for each arena, power derived from the id
 let mut handlers = Vec::new();
 for _ in 0..arenas {
   let fighters_register = Arc::clone(&fighters_register);
   handlers.push(thread::spawn(move || {
-    let mut rng = rand::thread_rng();
     let mut ids = Vec::new();
     for _ in 0..20 {
+      let id = highroller::rolling_idx();
       let fighter = Fighter {
-        id: highroller::rolling_idx(),
-        power: rng.gen_range(1, 100),
+        id,
+        power: (id as u32 * 37 + 11) % 100, // stand-in for a real power stat
       };
       ids.push(fighter.id);
       fighters_register.lock().unwrap().push(fighter);
@@ -98,24 +102,23 @@ for _ in 0..arenas {
   }));
 }
 
-// do a simple tournament that reveals a champion for each arena
+// run a simple tournament that finds a champion for each arena
 let mut champions: Vec<Fighter> = Vec::with_capacity(arenas);
 for handler in handlers {
   let arena_fighters = handler.join().unwrap();
   let fighters = fighters_register.lock().unwrap();
-  
-  // Find the fighter with the highest power in each arena
+
+  // find the fighter with the highest power in each arena
   let champion = arena_fighters.iter()
     .map(|&id| fighters.iter().find(|fighter| fighter.id == id).unwrap())
     .max_by_key(|fighter| fighter.power)
     .unwrap()
     .clone();
-  
+
   champions.push(champion);
 }
 
-// now match the top against each other in a playoff that is based 
-// on the power we randomized earlier
+// match the arena champions against each other for the ultimate champion
 let ultimate_champion = champions.into_iter()
   .max_by_key(|fighter| fighter.power)
   .unwrap();
@@ -149,12 +152,12 @@ very cheap to run.
 
 ## Extras
 
-With the `ruid_type` feature flag, you're able to leverage `RUID`s, or Rolling Unique Identifiers, as custom integer 
-types. You can convert a `RUID` to an standard integer or vice versa, compare two `RUID`s, manipulate `RUID`s with arithmetic operations if `allow_arithmetics` flag is on, and print `RUID`s as they implement the `fmt::Display` trait.
+With the `ruid_type` feature flag, you're able to use `RUID`s, or Rolling Unique Identifiers, as custom integer 
+types. You can convert a `RUID` to a standard integer or vice versa, compare two `RUID`s, manipulate `RUID`s with arithmetic operations if `allow_arithmetics` flag is on, and print `RUID`s as they implement the `fmt::Display` trait.
 
-Example usage of `RUID`:
+Example usage of `RUID` (requires the `ruid_type` feature, not enabled by default):
 
-```rust
+```rust,ignore
 use highroller::RUID;
 
 let id1 = RUID::new();
@@ -171,6 +174,6 @@ Whether you use this project, have learned something from it, or just like it, p
 
 
 ## License
->You can check out the full license [here](https://github.com/orgrinrt/highroller/blob/master/LICENSE)
+>You can check out the full license [here](https://github.com/orgrinrt/highroller/blob/main/LICENSE)
 
 This project is licensed under the terms of the **MIT** license.
