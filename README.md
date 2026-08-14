@@ -43,10 +43,10 @@ encountering issues related to concurrent data access. This is exercised by the 
 | Feature Flag           | Default     | Description                                                                                                                                                             |
 |------------------------|-------------|---------------------------------------------------------------------------------------------------------------------------------------------------------------------|
 | `strict`               | *Enabled*   | Panics on overflow. Disables comparisons and arithmetic operations between `RUID` and its underlying numeric type. *(When disabled, overflow wraps instead.)*         |
-| `ruid_type`            | *Disabled*  | Enables Rolling Unique ID (`RUID`) type, a wrapper over the rolling index. *(Currently fails to compile, see the "RUID" section below.)*                              |
+| `ruid_type`            | *Disabled*  | Enables Rolling Unique ID (`RUID`) type, a wrapper over the rolling index.                                                                                             |
 | `allow_arithmetics`    | *Disabled*  | Optional support for arithmetic operations on `RUID` *(note that without `strict` enabled, you should know what you are doing, since it can cause ambiguous behaviour)* |
-| `const`                | *Disabled*  | Makes `RUID::new()` a `const fn`. *(Experimental: `RUID` values created this way do not currently roll to a unique index.)*                                            |
-| `async`                | *Disabled*  | Marks `RUID` as `Send` and `Sync` explicitly, for use across thread boundaries                                                                                         |
+| `const`                | *Disabled*  | Makes `RUID::new()` a `const fn`. The index is rolled on first read instead, so `RUID` is not `Copy` and has no `Deref` under this flag.                               |
+| `async`                | *Disabled*  | Marks `RUID` as `Send` and `Sync` explicitly, for use across thread boundaries. With `const` the type is already both, so only `Send` is asserted.                      |
 | size (separate flags)  | `u16_index` | Choose the size of the rolling index: `u8_index`, `u16_index`, `u32_index`, `u64_index`, `u128_index`, `usize_index`                                                   |
 
 If you need a particular rolling index size, or if you want to implement more explicit typing with `RUID`, enable the features according to your use case. The `strict` feature will help you catch overflows, where as the `allow_arithmetics` flag expands `RUID` functionality to support arithmetic operations.
@@ -55,10 +55,6 @@ If you need a particular rolling index size, or if you want to implement more ex
 "Rolling Unique ID" (RUID) is a wrapper over the rolling index, with optional support for arithmetic 
 operations, and complete equivalence relation methods and display methods. You can use the `ruid_type` feature flag 
 to enable `RUID` and use it in your program. [Read more about `RUID` at the "Extras" section](#extras).
-
-> The `ruid_type` feature currently fails to compile (`impl Deref for RUID` returns a reference to a
-> temporary value). Enabling it breaks the build until this is fixed.
-
 
 ## Example
 
@@ -165,6 +161,26 @@ let id2 = RUID::new();
 
 assert_ne!(id1, id2);
 ```
+
+#### `RUID` under the `const` feature
+
+`RUID::new()` becomes a `const fn`, so a `RUID` can be built where a constant is required:
+
+```rust,ignore
+use highroller::RUID;
+
+static ID: RUID = RUID::new();
+
+// no index has been rolled yet at this point. The first read takes one and keeps it, so
+// every later read agrees with the first.
+assert_eq!(ID.get(), ID.get());
+```
+
+A `const fn` cannot roll an index, so the value starts out unassigned and takes one on first
+read. That needs somewhere to write the result, which costs two things this flag otherwise
+leaves alone: `RUID` is not `Copy` and does not implement `Deref`. Use `get()`, and clone where
+a value is needed twice. The lazy assignment is thread-safe, so a `RUID` shared between threads
+resolves to one index for all of them.
 
 ## Support
 
