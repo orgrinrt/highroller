@@ -567,12 +567,12 @@ mod tests {
         };
 
         match _lock_res {
-            Ok(lock_guard) => {
+            Ok(_lock_guard) => {
                 test_fn();
             },
             Err(poisoned_lock) => {
                 RUN_LOCK.clear_poison();
-                let lock_guard = poisoned_lock.into_inner();
+                let _lock_guard = poisoned_lock.into_inner();
                 test_fn();
             },
         }
@@ -586,7 +586,7 @@ mod tests {
 
             let count: usize = 254;
             let mut counts = Vec::new();
-            for i in 0..count {
+            for _i in 0..count {
                 counts.push(rolling_idx() as usize);
             }
 
@@ -600,12 +600,12 @@ mod tests {
         };
 
         match _lock_res {
-            Ok(lock_guard) => {
+            Ok(_lock_guard) => {
                 test_fn();
             },
             Err(poisoned_lock) => {
                 RUN_LOCK.clear_poison();
-                let lock_guard = poisoned_lock.into_inner();
+                let _lock_guard = poisoned_lock.into_inner();
                 test_fn();
             },
         }
@@ -654,12 +654,12 @@ mod tests {
         };
 
         match _lock_res {
-            Ok(lock_guard) => {
+            Ok(_lock_guard) => {
                 test_fn();
             },
             Err(poisoned_lock) => {
                 RUN_LOCK.clear_poison();
-                let lock_guard = poisoned_lock.into_inner();
+                let _lock_guard = poisoned_lock.into_inner();
                 test_fn();
             },
         }
@@ -781,12 +781,12 @@ mod tests {
         };
 
         match _lock_res {
-            Ok(lock_guard) => {
+            Ok(_lock_guard) => {
                 test_fn();
             },
             Err(poisoned_lock) => {
                 RUN_LOCK.clear_poison();
-                let lock_guard = poisoned_lock.into_inner();
+                let _lock_guard = poisoned_lock.into_inner();
                 test_fn();
             },
         }
