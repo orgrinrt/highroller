@@ -6,7 +6,7 @@ edition = "2021"
 description = """
 A simple, high-level rolling index that is thread-safe and guarantees cheap runtime-unique IDs.
 """
-license = "MIT"
+license = "MPL-2.0"
 readme = "README.md"
 keywords = ["thread-safe", "id", "counter", "static", "ruid"]
 categories = ["asynchronous", "concurrency", "game-development", "rust-patterns"]
