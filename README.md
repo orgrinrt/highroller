@@ -67,9 +67,10 @@ That's where you can take advantage of `highroller` to assign unique identifiers
 use std::sync::{Arc, Mutex};
 use std::thread;
 
+// the index width is a compile-time choice, so the id type follows whichever size flag is set
 #[derive(Clone)]
-struct Fighter {
-  id: u16,
+struct Fighter<I> {
+  id: I,
   power: u32,
 }
 
@@ -79,17 +80,17 @@ let fighters_register = Arc::new(Mutex::new(Vec::new()));
 // create four threads as four different arenas
 let arenas = 4;
 
-// gather 20 fighters for each arena, power derived from the id
+// gather 20 fighters for each arena
 let mut handlers = Vec::new();
 for _ in 0..arenas {
   let fighters_register = Arc::clone(&fighters_register);
   handlers.push(thread::spawn(move || {
     let mut ids = Vec::new();
-    for _ in 0..20 {
+    for n in 0..20u32 {
       let id = highroller::rolling_idx();
       let fighter = Fighter {
         id,
-        power: (id as u32 * 37 + 11) % 100, // stand-in for a real power stat
+        power: (n * 37 + 11) % 100, // stand-in for a real power stat
       };
       ids.push(fighter.id);
       fighters_register.lock().unwrap().push(fighter);
@@ -99,7 +100,7 @@ for _ in 0..arenas {
 }
 
 // run a simple tournament that finds a champion for each arena
-let mut champions: Vec<Fighter> = Vec::with_capacity(arenas);
+let mut champions = Vec::with_capacity(arenas);
 for handler in handlers {
   let arena_fighters = handler.join().unwrap();
   let fighters = fighters_register.lock().unwrap();
