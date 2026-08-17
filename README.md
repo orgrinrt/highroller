@@ -33,8 +33,9 @@ The function `rolling_idx()` returns the current index value. After retrieving, 
 > Please note that the rolling index is runtime-specific and is reset every time your application starts. 
  
 The rolling index is also thread-safe, meaning you can access it from multiple threads simultaneously without 
-encountering issues related to concurrent data access. This is exercised by the crate's test suite, which spawns
-1000 threads calling `rolling_idx()` concurrently and asserts every returned ID is unique.
+encountering issues related to concurrent data access. This is exercised by the crate's test suite, which
+spawns a thread per id the configured width can hand out, capped at 1000, and asserts every returned ID is
+unique.
 
 ### Feature Flags
 
