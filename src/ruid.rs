@@ -6,7 +6,8 @@
 //! only for as long as nobody used the rest of the surface.
 //!
 //! What closes that is saying where a value came from, in its type. `RUID<Rolled>` is one
-//! the counter handed out, and no safe path produces one except asking the counter.
+//! the counter handed out, and no safe path constructs one from anything else. Copies of
+//! an existing rolled id are of course still rolled ids.
 //! `RUID<Derived>` is anything else: built from an integer, parsed, or computed. The two
 //! compare and print alike, and a rolled id converts into a derived one freely because it
 //! genuinely is one, but nothing goes the other way.
@@ -38,9 +39,13 @@ pub trait Provenance: sealed::Sealed {
     const ROLLED: bool;
 }
 
-/// The value came from the rolling index, so no other `RUID<Rolled>` in this run holds it.
+/// The value came from the rolling index, so no other rolled id was *issued* this value in
+/// this run.
 ///
-/// The only way to obtain one is [`RUID::new`].
+/// [`RUID::new`] is the only thing that produces one. Copying or cloning an existing one
+/// naturally gives another holding the same value, which is what makes it behave like the
+/// value it is; what cannot happen is a rolled id carrying something the counter never
+/// handed out.
 #[derive(Debug)]
 pub enum Rolled {}
 

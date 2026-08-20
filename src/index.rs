@@ -20,12 +20,13 @@ pub const _ROLLING_IDX_MAX: Idx = Idx::MAX;
 // comparison, and wrapping is a mask, because every index width's range is a power
 // of two.
 //
-// Measured on this machine, uncontended: a mutex 8.8ns, a compare-and-swap loop
-// 2.5ns, this 2.0ns. At eight threads: 583us, 531us, 209us. The compare-and-swap
+// Measured on this machine, uncontended: a mutex 8.9ns, a compare-and-swap loop
+// 2.5ns, this 2.0ns. At eight threads: 583us, 531us, 195us. The compare-and-swap
 // loop is the interesting one, because it is the obvious replacement for a mutex
 // and it is barely better than one under contention: every conflicting thread
 // retries, so the retries are the work. `benches/rolling.rs` carries all of it,
-// with the mutex kept as an arm so the comparison stays honest.
+// with the mutex kept as an arm, and the last row measures this function rather
+// than a copy of it written for the benchmark.
 #[cfg(not(feature = "u128_index"))]
 mod counter {
     use super::Idx;
@@ -37,14 +38,20 @@ mod counter {
 
     /// Whether the counter is genuinely wider than the index.
     ///
-    /// At `u64_index` and `usize_index` it is not, so it cannot pass the index's
-    /// maximum, and the exhaustion check below would be a comparison whose answer is
-    /// fixed at compile time. Clippy says so, by denying it. It is unreachable in
-    /// practice too: a thousand million ids a second exhausts a 64-bit index in about
-    /// five hundred years.
+    /// Asked of the width, because the width is the question. An earlier version asked
+    /// whether the feature was named `usize_index`, which is the same thing only on a
+    /// 64-bit target: on wasm32 and i686 a `usize` is 32 bits, the counter really is
+    /// wider, and naming the feature compiled the check out anyway. `strict` then meant
+    /// nothing there, and worse, the cast below truncated and handed out an index already
+    /// in use. The mutex this replaced detected exhaustion at every width.
+    ///
+    /// Where it is false the check would be a comparison against the counter's own
+    /// maximum, whose answer is fixed at compile time; clippy denies that, correctly. It
+    /// is also unreachable in practice: a thousand million ids a second exhausts a 64-bit
+    /// index in about five hundred years.
     #[cfg(feature = "strict")]
     const EXHAUSTION_IS_OBSERVABLE: bool =
-        !cfg!(any(feature = "u64_index", feature = "usize_index"));
+        core::mem::size_of::<Idx>() < core::mem::size_of::<u64>();
 
     #[inline]
     pub(super) fn next() -> Idx {

@@ -36,9 +36,9 @@ call gave.
 > The index is specific to one run. It starts at zero every time the process does, and it
 > is not written anywhere.
 
-It is safe to call from any number of threads at once. The test suite spawns a thread per
-id the configured width can hand out, capped at a thousand, with no staggering delays, and
-asserts that every returned id differs.
+It is safe to call from any number of threads at once. The test suite spawns up to 256
+threads, one per id, with no staggering delays, and asserts that every returned id
+differs.
 
 ## What it costs
 
@@ -56,9 +56,14 @@ The alternatives, from `benches/rolling.rs`, which keeps all of them as arms:
 
 | | one thread | 2 threads | 4 threads | 8 threads |
 |---|---:|---:|---:|---:|
-| a mutex | 8.8 ns | 71 µs | 298 µs | 583 µs |
+| a mutex | 8.9 ns | 71 µs | 298 µs | 583 µs |
 | a compare-and-swap loop | 2.5 ns | 36 µs | 102 µs | 531 µs |
-| this | 2.0 ns | 36 µs | 77 µs | 209 µs |
+| `rolling_idx` as it ships | 2.0 ns | 35 µs | 72 µs | 195 µs |
+
+The last row is `highroller::rolling_idx` itself rather than a copy of it written for the
+benchmark. That distinction is not pedantry: the stand-in this replaced masked where the
+shipped path does not, and its strict variant declared a branch unreachable that a shared
+counter carried it into on 93% of calls.
 
 The compare-and-swap row is the one worth looking at. It is the obvious replacement for a
 mutex, and under real contention it is barely better than one, because every thread that
@@ -192,13 +197,14 @@ where another was meant. A `RUID` also says **where its value came from**, in it
 ```rust
 # #[cfg(feature = "ruid_type")]
 # {
-use highroller::{Derived, Rolled, RUID};
+use highroller::{Derived, Idx, Rolled, RUID};
 
 // Rolled: the counter handed this out, so nothing else in this run holds it
 let id: RUID<Rolled> = RUID::new();
 
 // Derived: built from a number, so it carries no such promise
-let from_config: RUID<Derived> = RUID::from(7u16);
+// `Idx` follows whichever width the size flag chose, so this example does too
+let from_config: RUID<Derived> = RUID::from(7 as Idx);
 
 assert!(id.is_rolled());
 assert!(!from_config.is_rolled());

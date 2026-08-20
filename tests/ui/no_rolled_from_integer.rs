@@ -2,8 +2,8 @@
 //!
 //! This is the whole guarantee. If it ever compiles, `RUID<Rolled>` means nothing.
 
-use highroller::{Rolled, RUID};
+use highroller::{Idx, Rolled, RUID};
 
 fn main() {
-    let _fabricated: RUID<Rolled> = RUID::from(5u16);
+    let _fabricated: RUID<Rolled> = RUID::from(5 as Idx);
 }

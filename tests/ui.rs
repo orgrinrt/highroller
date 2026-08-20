@@ -3,6 +3,11 @@
 //! `RUID<Rolled>` claims its value came from the rolling counter. That claim is worth
 //! exactly as much as the absence of any other way to build one, and an absence is not
 //! something a passing test can demonstrate. These are what hold it.
+//!
+//! The suite runs at `u16_index` only, declared in the manifest. A recorded expectation
+//! contains the compiler's own words, and those name the concrete integer type, so one
+//! file cannot match every width. The refusals themselves are generic over `Idx` and do
+//! not vary with it.
 
 use std::fs;
 

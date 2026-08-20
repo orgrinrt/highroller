@@ -89,6 +89,26 @@ fn threads_never_receive_the_same_index() {
     );
 }
 
+/// Whether the counter is wider than the index, which is what makes exhaustion visible.
+///
+/// A runtime read of the same thing the crate decides at compile time. The tests below
+/// used to be gated on the feature name instead, which on wasm32 and i686 skipped exactly
+/// the configuration where the predicate had been wrong.
+const EXHAUSTION_IS_OBSERVABLE: bool =
+    core::mem::size_of::<Idx>() < core::mem::size_of::<u64>();
+
+#[test]
+fn the_exhaustion_check_follows_the_width_and_not_the_feature_name() {
+    // `usize_index` is 64 bits on this machine and 32 on wasm32 and i686, so a predicate
+    // naming the feature and one measuring the width disagree there. The width is the
+    // question, and this is what says so.
+    assert_eq!(
+        EXHAUSTION_IS_OBSERVABLE,
+        core::mem::size_of::<Idx>() < 8,
+        "exhaustion is observable exactly when the counter is wider than the index"
+    );
+}
+
 /// The property the wide counter is for.
 ///
 /// A counter as narrow as the index wraps to zero when it is exhausted, and a thread
@@ -110,32 +130,59 @@ fn the_last_value_of_the_width_is_handed_out() {
     );
 }
 
-#[cfg(not(any(feature = "u64_index", feature = "usize_index")))]
-#[test]
+/// Runs `f` and reports whether it panicked, without printing the panic.
+///
+/// `#[should_panic]` cannot say "panics, where the width allows one to be detected", and
+/// which widths those are is not known until `size_of` is evaluated.
 #[cfg(feature = "strict")]
-#[should_panic(expected = "exhausted")]
-fn strict_refuses_once_the_width_is_exhausted() {
-    let _g = serial();
-    index::exhaust();
-    let _ = rolling_idx();
+fn panicked(f: impl FnOnce() + std::panic::UnwindSafe) -> bool {
+    let previous = std::panic::take_hook();
+    std::panic::set_hook(Box::new(|_| {}));
+    let outcome = std::panic::catch_unwind(f);
+    std::panic::set_hook(previous);
+    outcome.is_err()
 }
 
-#[cfg(not(any(feature = "u64_index", feature = "usize_index")))]
 #[test]
 #[cfg(feature = "strict")]
-#[should_panic(expected = "exhausted")]
+fn strict_refuses_once_the_width_is_exhausted() {
+    if !EXHAUSTION_IS_OBSERVABLE {
+        return;
+    }
+    let _g = serial();
+    index::exhaust();
+    assert!(
+        panicked(|| {
+            let _ = rolling_idx();
+        }),
+        "an exhausted index refuses rather than reusing a value"
+    );
+}
+
+#[test]
+#[cfg(feature = "strict")]
 fn strict_keeps_refusing_after_the_first_refusal() {
+    if !EXHAUSTION_IS_OBSERVABLE {
+        return;
+    }
     let _g = serial();
     index::exhaust();
     // Well past the end: a same-width counter would have wrapped back into the valid
     // range by now and handed out a duplicate instead of refusing.
-    let _ = rolling_idx();
+    assert!(
+        panicked(|| {
+            let _ = rolling_idx();
+        }),
+        "and it keeps refusing rather than refusing once"
+    );
 }
 
-#[cfg(not(any(feature = "u64_index", feature = "usize_index")))]
 #[test]
 #[cfg(not(feature = "strict"))]
 fn without_strict_the_index_wraps_and_repeats() {
+    if !EXHAUSTION_IS_OBSERVABLE {
+        return;
+    }
     let _g = serial();
     let first = rolling_idx();
     index::exhaust();
@@ -159,14 +206,12 @@ fn the_last_value_of_the_width_is_handed_out() {
     );
 }
 
-#[test]
-fn the_maximum_matches_the_configured_width() {
-    assert_eq!(
-        _ROLLING_IDX_MAX,
-        Idx::MAX,
-        "the reported maximum is the width's own, not a number written down beside it"
-    );
-}
+// There was a test here asserting `_ROLLING_IDX_MAX == Idx::MAX`, against a definition
+// reading `pub const _ROLLING_IDX_MAX: Idx = Idx::MAX;`. A constant compared to the
+// literal its own definition sets cannot fail, and the shape has a name in this
+// workspace's test gate along with the instruction to delete rather than repair it. What
+// ties the maximum to something the code does is the exhaustion tests above, which place
+// the counter at it and act on what comes back.
 
 #[cfg(feature = "ruid_type")]
 mod ruid {

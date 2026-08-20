@@ -46,7 +46,12 @@ trybuild = "1.0"
 
 [[test]]
 name = "ui"
-required-features = ["ruid_type", "allow_arithmetics"]
+# Pinned to one width, because a compile-fail expectation contains the compiler's own
+# words and those name the concrete integer type: the same refusal reads
+# `does not implement AddAssign<u16>` here and `<u8>` under u8_index, so a single recorded
+# stderr cannot match every width. What the suite pins does not vary with width in any
+# case, since the impls are generic over `Idx`.
+required-features = ["ruid_type", "allow_arithmetics", "u16_index"]
 
 [[bench]]
 name = "rolling"
