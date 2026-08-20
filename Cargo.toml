@@ -1,8 +1,11 @@
 [package]
 name = "highroller"
 authors = ["orgrinrt", "Hiisi Digital"]
-version = "0.1.1"
+version = "0.2.0"
 edition = "2021"
+# Verified by building every feature shape under 1.70.0. OnceLock, which the `const`
+# feature is built on, is what sets the floor.
+rust-version = "1.70"
 description = """
 A simple, high-level rolling index that is thread-safe and guarantees cheap runtime-unique IDs.
 """
@@ -15,7 +18,6 @@ homepage = "https://github.com/orgrinrt/highroller"
 repository = "https://github.com/orgrinrt/highroller"
 
 [dependencies]
-lazy_static = "1.5.0"
 
 [features]
 default = ["u16_index", "strict"]
@@ -37,3 +39,15 @@ test_suite_a = ["u8_index", "ruid_type", "async", "allow_arithmetics"]
 test_suite_b = ["u32_index", "ruid_type", "const", "allow_arithmetics"]
 test_suite_c = ["u16_index", "strict", "ruid_type", "const", "async"]
 test_suite_d = ["u64_index", "strict", "ruid_type", "allow_arithmetics"]
+
+[dev-dependencies]
+criterion = { version = "0.5", default-features = false, features = ["cargo_bench_support"] }
+trybuild = "1.0"
+
+[[test]]
+name = "ui"
+required-features = ["ruid_type", "allow_arithmetics"]
+
+[[bench]]
+name = "rolling"
+harness = false
