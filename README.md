@@ -52,6 +52,19 @@ unique.
 
 If you need a particular rolling index size, or if you want to implement more explicit typing with `RUID`, enable the features according to your use case. The `strict` feature will help you catch overflows, where as the `allow_arithmetics` flag expands `RUID` functionality to support arithmetic operations.
 
+**Exactly one size flag can be on at a time.** Each one defines the same index type, so two of them
+is a duplicate definition rather than a wider index. The default is `u16_index`, which means picking
+a different size also means turning the default off:
+
+```toml
+[dependencies]
+highroller = { version = "0.1", default-features = false, features = ["u32_index", "strict"] }
+```
+
+Turning the default off without naming a size leaves no index type at all. Both mistakes are caught
+at compile time with a message saying which one happened. The same constraint is why
+`cargo build --all-features` cannot work on this crate.
+
 ### RUID
 "Rolling Unique ID" (RUID) is a wrapper over the rolling index, with optional support for arithmetic 
 operations, and complete equivalence relation methods and display methods. You can use the `ruid_type` feature flag 
