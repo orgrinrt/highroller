@@ -207,4 +207,4 @@ Whether you use this project, have learned something from it, or just like it, p
 ## License
 >You can check out the full license [here](https://github.com/orgrinrt/highroller/blob/main/LICENSE)
 
-This project is licensed under the terms of the **MIT** license.
+This project is licensed under the terms of the **MPL-2.0** license.
