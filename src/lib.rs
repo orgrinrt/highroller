@@ -499,6 +499,53 @@ macro_rules! declare_rolling_idx {
     };
 }
 
+// The width features are mutually exclusive: each expands the same macro, so
+// enabling two defines `RUID`, `_ROLLING_IDX` and `_ROLLING_IDX_MAX` twice.
+// Without this guard the failure is a wall of E0428 duplicate-definition errors
+// naming internals, with nothing pointing at the feature flags that caused it,
+// which is what `cargo build --all-features` produced.
+#[cfg(any(
+    all(feature = "u8_index", feature = "u16_index"),
+    all(feature = "u8_index", feature = "u32_index"),
+    all(feature = "u8_index", feature = "u64_index"),
+    all(feature = "u8_index", feature = "u128_index"),
+    all(feature = "u8_index", feature = "usize_index"),
+    all(feature = "u16_index", feature = "u32_index"),
+    all(feature = "u16_index", feature = "u64_index"),
+    all(feature = "u16_index", feature = "u128_index"),
+    all(feature = "u16_index", feature = "usize_index"),
+    all(feature = "u32_index", feature = "u64_index"),
+    all(feature = "u32_index", feature = "u128_index"),
+    all(feature = "u32_index", feature = "usize_index"),
+    all(feature = "u64_index", feature = "u128_index"),
+    all(feature = "u64_index", feature = "usize_index"),
+    all(feature = "u128_index", feature = "usize_index"),
+))]
+compile_error!(
+    "more than one index-width feature is enabled. Exactly one of u8_index, u16_index, \
+     u32_index, u64_index, u128_index or usize_index selects the width of the rolling \
+     index, and they cannot coexist. The default is u16_index, so a second one usually \
+     means default-features was left on: set `default-features = false` alongside the \
+     width you want. `--all-features` cannot work on this crate for the same reason."
+);
+
+// Equally, selecting none leaves the crate with no index type at all, and the
+// errors are then about a missing `RUID` rather than about the flags.
+#[cfg(not(any(
+    feature = "u8_index",
+    feature = "u16_index",
+    feature = "u32_index",
+    feature = "u64_index",
+    feature = "u128_index",
+    feature = "usize_index",
+)))]
+compile_error!(
+    "no index-width feature is enabled, so there is no rolling index type to use. \
+     Enable exactly one of u8_index, u16_index, u32_index, u64_index, u128_index or \
+     usize_index. The default is u16_index; this usually means default-features was \
+     turned off without naming a replacement."
+);
+
 #[cfg(feature = "u8_index")]
 declare_rolling_idx!(u8, u8::MAX);
 
