@@ -83,8 +83,7 @@ mod counter {
         prev as Idx
     }
 
-    #[cfg(test)]
-    pub(crate) fn reset() {
+    pub(super) fn reset() {
         COUNTER.store(0, Ordering::SeqCst);
     }
 
@@ -151,9 +150,7 @@ mod counter {
         value
     }
 
-    /// Places the counter, so a test can reach exhaustion without counting to it.
-    #[cfg(test)]
-    pub(crate) fn reset() {
+    pub(super) fn reset() {
         *COUNTER
             .lock()
             .unwrap_or_else(std::sync::PoisonError::into_inner) = (0, false);
@@ -189,5 +186,82 @@ pub fn rolling_idx() -> Idx {
     counter::next()
 }
 
+/// Puts the rolling index back to zero.
+///
+/// **Every value handed out before this call can be handed out again.** The index is unique
+/// within a run because it only ever moves forward, and this is the one thing that breaks
+/// that, so it is for a program that knows the previous run of ids is finished with: a test
+/// that wants each case to start from zero, an arena being reused, a phase boundary where
+/// nothing from the last phase survives.
+///
+/// It is not synchronised against readers. A thread calling [`rolling_idx`] while this runs
+/// gets a value from one side or the other, and which is not defined.
+///
+/// ```
+/// use highroller::{reset_rolling_idx, rolling_idx};
+///
+/// let first = rolling_idx();
+/// let second = rolling_idx();
+/// assert_ne!(first, second);
+///
+/// reset_rolling_idx();
+/// assert_eq!(rolling_idx(), 0, "the index starts again");
+/// ```
+#[inline]
+pub fn reset_rolling_idx() {
+    counter::reset();
+}
+
 #[cfg(test)]
-pub(crate) use counter::{at_last, exhaust, reset};
+pub(crate) use counter::{at_last, exhaust};
+
+#[cfg(test)]
+pub(crate) use self::reset_rolling_idx as reset;
+
+/// Takes a run of indices into storage the caller supplies.
+///
+/// The counter is the crate's, but the memory is not: [`Lend`] is notko's contract for
+/// storage handed over by whoever obtained it, so this fills a stack array, a slice out of
+/// an arena, or a region from an allocator the caller already holds, and never asks where
+/// it came from.
+///
+/// Fills the whole of what it is lent and returns how many that was, which is the storage's
+/// capacity. A caller wanting fewer lends a smaller slice.
+///
+/// `?Sized`, so a bare `&mut [Idx]` out of an arena is lent directly rather than by lending
+/// a reference to one. Without it the `Lend for [T]` impl is unreachable here, which is
+/// exactly the shape an arena hands out.
+///
+/// ```
+/// # #[cfg(feature = "no_alloc")] {
+/// use highroller::{fill_rolling_idx, reset_rolling_idx, Idx};
+///
+/// reset_rolling_idx();
+/// let mut ids = [0 as Idx; 4];
+/// let taken = fill_rolling_idx(&mut ids);
+///
+/// assert_eq!(taken, 4);
+/// assert_eq!(ids, [0, 1, 2, 3]);
+/// # }
+/// ```
+///
+/// Under `strict` an exhausted index panics here exactly as it does in [`rolling_idx`],
+/// because this takes the same values by the same route.
+#[cfg(feature = "no_alloc")]
+#[inline]
+pub fn fill_rolling_idx<L>(storage: &mut L) -> usize
+where
+    L: notko::lend::Lend<Idx> + ?Sized,
+{
+    let mut fill = notko::lend::Fill::new(storage);
+    // The id is taken only once there is somewhere to put it. Writing this as
+    // `while fill.push(counter::next()).is_ok() {}` reads correctly and is not: the
+    // argument is evaluated before the call, so the refusal that ends the loop discards an
+    // id the counter has already handed out, and every fill leaves a gap of one. The
+    // contents are right either way, which is why it took a test that looked at the counter
+    // afterwards rather than at the storage.
+    while fill.len() < fill.capacity() {
+        let _ = fill.push(counter::next());
+    }
+    fill.len()
+}

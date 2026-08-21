@@ -15,7 +15,7 @@ use std::fs;
 ///
 /// `trybuild` is given a glob, and a glob matching nothing is not an error, so without
 /// this the suite would pass having checked no case at all.
-const EXPECTED_CASES: usize = 3;
+const EXPECTED_CASES: usize = 4;
 
 #[test]
 fn the_provenance_guarantee_still_holds() {

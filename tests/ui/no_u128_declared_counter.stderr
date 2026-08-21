@@ -1,0 +1,7 @@
+error: declare_rolling_idx!: a 128-bit index has no wider atomic to count in, so it cannot use the counter this macro generates. The crate's own `u128_index` feature carries that width, with a lock and a note saying what it costs.
+ --> tests/ui/no_u128_declared_counter.rs:6:5
+  |
+6 |     highroller::declare_rolling_idx!(u128);
+  |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  |
+  = note: this error originates in the macro `highroller::declare_rolling_idx` (in Nightly builds, run with -Z macro-backtrace for more info)
