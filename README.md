@@ -1,44 +1,16 @@
-highroller
-============
-<div style="text-align: center;">
+# `highroller`
 
-[![GitHub Stars](https://img.shields.io/github/stars/orgrinrt/highroller.svg)](https://github.com/orgrinrt/highroller/stargazers) 
-[![Crates.io Total Downloads](https://img.shields.io/crates/d/highroller)](https://crates.io/crates/highroller)
-[![GitHub Issues](https://img.shields.io/github/issues/orgrinrt/highroller.svg)](https://github.com/orgrinrt/highroller/issues) 
-[![Current Version](https://img.shields.io/badge/version-0.2.0-orange.svg)](https://github.com/orgrinrt/highroller) 
+<div align="center" style="text-align: center;">
 
->A simple, high-level rolling index that is thread-safe and guarantees cheap runtime-unique IDs.
+[![GitHub Stars](https://img.shields.io/github/stars/orgrinrt/highroller.svg)](https://github.com/orgrinrt/highroller/stargazers)
+[![Crates.io](https://img.shields.io/crates/v/highroller)](https://crates.io/crates/highroller)
+[![docs.rs](https://img.shields.io/docsrs/highroller)](https://docs.rs/highroller)
+[![GitHub Issues](https://img.shields.io/github/issues/orgrinrt/highroller.svg)](https://github.com/orgrinrt/highroller/issues)
+![License](https://img.shields.io/github/license/orgrinrt/highroller?color=%23009689)
+
+> A high-level rolling index, thread-safe, handing out cheap runtime-unique ids.
 
 </div>
-
-# Usage
-
-A statically available, thread-safe rolling index, for the cases where a UUID is more
-than the situation calls for. Something needs a distinct name for as long as the program
-runs, nothing needs that name to mean anything afterwards, and a counter is the whole
-answer.
-
-The main function is `rolling_idx()`:
-
-```rust
-let id1 = highroller::rolling_idx();
-let id2 = highroller::rolling_idx();
-println!("Id 1 is: {}", id1);
-println!("Id 2 is: {}", id2);
-// outputs:
-// Id 1 is: 0
-// Id 2 is: 1
-```
-
-It returns the current value and then increases it, so each call gives a value no earlier
-call gave.
-
-> The index is specific to one run. It starts at zero every time the process does, and it
-> is not written anywhere.
-
-It is safe to call from any number of threads at once. The test suite spawns up to 256
-threads, one per id, with no staggering delays, and asserts that every returned id
-differs.
 
 ## What it costs
 
@@ -275,8 +247,10 @@ Whether you use this project, have learned something from it, or just like it, p
 
 <a href="https://buymeacoffee.com/orgrinrt" target="_blank"><img src="https://www.buymeacoffee.com/assets/img/custom_images/orange_img.png" alt="Buy Me A Coffee" style="height: auto !important;width: auto !important;" ></a>
 
-
 ## License
->You can check out the full license [here](https://github.com/orgrinrt/highroller/blob/main/LICENSE)
 
-This project is licensed under the terms of the **MPL-2.0** license.
+> The project is licensed under the **Mozilla Public License 2.0**.
+
+`SPDX-License-Identifier: MPL-2.0`
+
+> You can check out the full license [here](https://github.com/orgrinrt/highroller/blob/dev/LICENSE)
