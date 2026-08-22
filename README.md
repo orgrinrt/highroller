@@ -241,6 +241,19 @@ read. That needs somewhere to write the result, which costs two things: `RUID` i
 operators (`&a + &b`) where a value is needed twice. The lazy assignment is thread-safe, so
 a `RUID` shared between threads resolves to one index for all of them.
 
+## Installation
+
+```bash
+cargo add highroller
+```
+
+Or in `Cargo.toml`:
+
+```toml
+[dependencies]
+highroller = "0.2"
+```
+
 ## Support
 
 Whether you use this project, have learned something from it, or just like it, please consider supporting it by buying me a coffee, so I can dedicate more time on open-source projects like this :)

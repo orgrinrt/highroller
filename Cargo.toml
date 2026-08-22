@@ -1,6 +1,5 @@
 [package]
 name = "highroller"
-authors = ["orgrinrt", "Hiisi Digital"]
 version = "0.2.0"
 edition = "2021"
 # Verified by building every feature shape under 1.70.0. OnceLock, which the `const`
@@ -12,6 +11,7 @@ A simple, high-level rolling index that is thread-safe and guarantees cheap runt
 license = "MPL-2.0"
 readme = "README.md"
 keywords = ["thread-safe", "id", "counter", "static", "ruid"]
+exclude = [".idea/", "target/"]
 categories = ["asynchronous", "concurrency", "game-development", "rust-patterns"]
 documentation = "https://docs.rs/highroller"
 homepage = "https://github.com/orgrinrt/highroller"
