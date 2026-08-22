@@ -1,0 +1,13 @@
+error[E0368]: binary assignment operation `+=` cannot be applied to type `RUID`
+  --> tests/ui/no_assign_to_rolled.rs:10:5
+   |
+10 |     rolled += 1 as Idx;
+   |     ------^^^^^^^^^^^^
+   |     |
+   |     cannot use `+=` on type `RUID`
+   |
+note: `RUID` does not implement `AddAssign<u16>`
+  --> src/ruid.rs
+   |
+   | pub struct RUID<P: Provenance = Rolled> {
+   | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ `RUID` is defined in another crate

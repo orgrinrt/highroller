@@ -1,21 +1,29 @@
 [package]
 name = "highroller"
-authors = ["orgrinrt", "Hiisi Digital"]
-version = "0.1.1"
+version = "0.2.0"
 edition = "2021"
+# Verified by building every feature shape under 1.70.0. OnceLock, which the `const`
+# feature is built on, is what sets the floor.
+rust-version = "1.70"
 description = """
 A simple, high-level rolling index that is thread-safe and guarantees cheap runtime-unique IDs.
 """
 license = "MPL-2.0"
 readme = "README.md"
 keywords = ["thread-safe", "id", "counter", "static", "ruid"]
+exclude = [".idea/", "target/"]
 categories = ["asynchronous", "concurrency", "game-development", "rust-patterns"]
 documentation = "https://docs.rs/highroller"
 homepage = "https://github.com/orgrinrt/highroller"
 repository = "https://github.com/orgrinrt/highroller"
 
 [dependencies]
-lazy_static = "1.5.0"
+# Only under `no_alloc`, where it supplies the lending contract the batch API is written
+# against. Nothing else in the crate needs it, and the crate allocates nothing either way.
+# notko is not on crates.io yet, so this is a git dependency exactly as the rest of the
+# stack declares it. That has a consequence: crates.io refuses a git dependency whatever
+# its optionality, so a crate carrying `no_alloc` cannot be published until notko is.
+notko = { git = "ssh://git@github.com/orgrinrt/notko.git", branch = "dev", optional = true, default-features = false }
 
 [features]
 default = ["u16_index", "strict"]
@@ -26,6 +34,16 @@ u32_index = []
 u64_index = []
 u128_index = []
 usize_index = []
+# The crate's own code is `core` only, so this is the attribute and nothing else. It is
+# incompatible with `const` (which keeps a `OnceLock`) and with `u128_index` (which has no
+# atomic to sit in and keeps a `Mutex`); both say so at compile time rather than failing
+# deep inside `core`.
+no_std = []
+# Nothing here allocates under any configuration, so this feature does not remove
+# allocation: it declares its absence and brings in the contract for handing storage the
+# other way, from the caller. `fill_rolling_idx` is what it adds.
+no_alloc = ["no_std", "dep:notko"]
+
 # actual features
 strict = []
 ruid_type = []
@@ -37,3 +55,41 @@ test_suite_a = ["u8_index", "ruid_type", "async", "allow_arithmetics"]
 test_suite_b = ["u32_index", "ruid_type", "const", "allow_arithmetics"]
 test_suite_c = ["u16_index", "strict", "ruid_type", "const", "async"]
 test_suite_d = ["u64_index", "strict", "ruid_type", "allow_arithmetics"]
+
+[dev-dependencies]
+criterion = { version = "0.5", default-features = false, features = ["cargo_bench_support"] }
+trybuild = "1.0"
+
+[[test]]
+name = "ui"
+# Pinned to one width, because a compile-fail expectation contains the compiler's own
+# words and those name the concrete integer type: the same refusal reads
+# `does not implement AddAssign<u16>` here and `<u8>` under u8_index, so a single recorded
+# stderr cannot match every width. What the suite pins does not vary with width in any
+# case, since the impls are generic over `Idx`.
+required-features = ["ruid_type", "allow_arithmetics", "u16_index"]
+
+[[bench]]
+name = "rolling"
+harness = false
+
+# Examples declare what they need, so `cargo build --examples` under any feature set builds
+# the ones that can build rather than failing on the ones that cannot.
+[[example]]
+name = "taking_ids"
+path = "examples/taking_ids.rs"
+
+[[example]]
+name = "two_counters"
+path = "examples/two_counters.rs"
+
+[[example]]
+name = "provenance"
+path = "examples/provenance.rs"
+required-features = ["ruid_type", "allow_arithmetics"]
+
+[[example]]
+name = "id_pool"
+path = "examples/id_pool.rs"
+required-features = ["ruid_type", "no_alloc"]
+
