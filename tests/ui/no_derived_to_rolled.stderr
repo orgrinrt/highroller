@@ -1,0 +1,15 @@
+error[E0277]: the trait bound `RUID: From<RUID<Derived>>` is not satisfied
+  --> tests/ui/no_derived_to_rolled.rs:10:43
+   |
+10 |     let _promoted: RUID<Rolled> = derived.into();
+   |                                           ^^^^ the trait `From<RUID<Derived>>` is not implemented for `RUID`
+   |
+help: the following other types implement trait `From<T>`
+  --> src/ruid.rs
+   |
+   | impl From<Idx> for RUID<Derived> {
+   | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ `RUID<Derived>` implements `From<u16>`
+...
+   | impl From<RUID<Rolled>> for RUID<Derived> {
+   | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ `RUID<Derived>` implements `From<RUID>`
+   = note: required for `RUID<Derived>` to implement `Into<RUID>`

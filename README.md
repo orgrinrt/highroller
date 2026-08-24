@@ -1,109 +1,118 @@
-highroller
-============
-<div style="text-align: center;">
+# `highroller`
 
-[![GitHub Stars](https://img.shields.io/github/stars/orgrinrt/highroller.svg)](https://github.com/orgrinrt/highroller/stargazers) 
-[![Crates.io Total Downloads](https://img.shields.io/crates/d/highroller)](https://crates.io/crates/highroller)
-[![GitHub Issues](https://img.shields.io/github/issues/orgrinrt/highroller.svg)](https://github.com/orgrinrt/highroller/issues) 
-[![Current Version](https://img.shields.io/badge/version-0.1.0-orange.svg)](https://github.com/orgrinrt/highroller) 
+<div align="center" style="text-align: center;">
 
->A simple, high-level rolling index that is thread-safe and guarantees cheap runtime-unique IDs.
+[![GitHub Stars](https://img.shields.io/github/stars/orgrinrt/highroller.svg)](https://github.com/orgrinrt/highroller/stargazers)
+[![Crates.io](https://img.shields.io/crates/v/highroller)](https://crates.io/crates/highroller)
+[![docs.rs](https://img.shields.io/docsrs/highroller)](https://docs.rs/highroller)
+[![GitHub Issues](https://img.shields.io/github/issues/orgrinrt/highroller.svg)](https://github.com/orgrinrt/highroller/issues)
+![License](https://img.shields.io/github/license/orgrinrt/highroller?color=%23009689)
+
+> A high-level rolling index, thread-safe, handing out cheap runtime-unique ids.
 
 </div>
 
-# Usage
+## What it costs
 
-This Rust crate provides a statically available, thread-safe rolling index. Intended for 
-simple use cases where UUIDs would be overkill and a cheap alternative is preferable.
+Rolling an index is one atomic add, which measured at 2.0ns on the machine this was
+written on.
 
-The main function provided is `rolling_idx()`. Simplistically:
+The counter is deliberately wider than the index. That sounds like a detail and is the
+whole design: an index has to wrap or refuse at its own maximum, which is a second
+decision that an atomic add cannot express, so a counter of the same width needs a
+compare-and-swap loop instead. A wider counter passes the narrow maximum long before it
+could wrap itself, so exhaustion becomes a comparison and wrapping becomes the narrowing
+cast that was happening anyway.
 
-```rust
-let id1 = highroller::rolling_idx();
-let id2 = highroller::rolling_idx();
-println!("Id 1 is: {}", id1);
-println!("Id 2 is: {}", id2);
-// outputs:
-// Id 1 is: 0
-// Id 2 is: 1
-```
+The alternatives, from `benches/rolling.rs`, which keeps all of them as arms:
 
-The function `rolling_idx()` returns the current index value. After retrieving, it increments the index by 1. This way, you get a unique, ever-increasing rolling index each time you call this function.
+| | one thread | 2 threads | 4 threads | 8 threads |
+|---|---:|---:|---:|---:|
+| a mutex | 8.9 ns | 71 µs | 298 µs | 583 µs |
+| a compare-and-swap loop | 2.5 ns | 36 µs | 102 µs | 531 µs |
+| `rolling_idx` as it ships | 2.0 ns | 35 µs | 72 µs | 195 µs |
 
-> Please note that the rolling index is runtime-specific and is reset every time your application starts. 
- 
-The rolling index is also thread-safe, meaning you can access it from multiple threads simultaneously without 
-encountering issues related to concurrent data access. This is exercised by the crate's test suite, which
-spawns a thread per id the configured width can hand out, capped at 1000, and asserts every returned ID is
-unique.
+The last row is `highroller::rolling_idx` itself rather than a copy of it written for the
+benchmark. That distinction is not pedantry: the stand-in this replaced masked where the
+shipped path does not, and its strict variant declared a branch unreachable that a shared
+counter carried it into on 93% of calls.
+
+The compare-and-swap row is the one worth looking at. It is the obvious replacement for a
+mutex, and under real contention it is barely better than one, because every thread that
+loses the race retries and the retries become the work.
+
+`u128_index` is the exception and keeps a lock, because there is no 128-bit atomic to put
+a counter in. It is also the width nobody needs: a program exhausting a 64-bit index at
+one per nanosecond has been running for five hundred years.
 
 ### Feature Flags
 
-`highroller` provides several feature flags for flexibility.
-
 | Feature Flag           | Default     | Description                                                                                                                                                             |
 |------------------------|-------------|---------------------------------------------------------------------------------------------------------------------------------------------------------------------|
-| `strict`               | *Enabled*   | Panics on overflow. Disables comparisons and arithmetic operations between `RUID` and its underlying numeric type. *(When disabled, overflow wraps instead.)*         |
-| `ruid_type`            | *Disabled*  | Enables Rolling Unique ID (`RUID`) type, a wrapper over the rolling index.                                                                                             |
-| `allow_arithmetics`    | *Disabled*  | Optional support for arithmetic operations on `RUID` *(note that without `strict` enabled, you should know what you are doing, since it can cause ambiguous behaviour)* |
-| `const`                | *Disabled*  | Makes `RUID::new()` a `const fn`. The index is rolled on first read instead, so `RUID` is not `Copy` and has no `Deref` under this flag.                               |
-| `async`                | *Disabled*  | Marks `RUID` as `Send` and `Sync` explicitly, for use across thread boundaries. With `const` the type is already both, so only `Send` is asserted.                      |
-| size (separate flags)  | `u16_index` | Choose the size of the rolling index: `u8_index`, `u16_index`, `u32_index`, `u64_index`, `u128_index`, `usize_index`                                                   |
+| `strict`               | *Enabled*   | Panics when the width is exhausted, rather than wrapping and repeating. Also withholds comparison and arithmetic between `RUID` and a bare integer.                     |
+| `ruid_type`            | *Disabled*  | Enables `RUID`, a type of its own over the rolling index.                                                                                                              |
+| `allow_arithmetics`    | *Disabled*  | Arithmetic operators on `RUID`, by value and by reference.                                                                                                             |
+| `const`                | *Disabled*  | Makes `RUID::new()` a `const fn`. The index is taken on first read instead, so `RUID` is not `Copy` and has no `Deref` under this flag.                                 |
+| `async`                | *Disabled*  | Kept so that naming it is not an error. It gates nothing: `RUID` is `Send` and `Sync` on its own, and the crate asserts so at compile time.                             |
+| size (separate flags)  | `u16_index` | The width of the index: `u8_index`, `u16_index`, `u32_index`, `u64_index`, `u128_index`, `usize_index`                                                                 |
 
-If you need a particular rolling index size, or if you want to implement more explicit typing with `RUID`, enable the features according to your use case. The `strict` feature will help you catch overflows, where as the `allow_arithmetics` flag expands `RUID` functionality to support arithmetic operations.
+`strict` carries two unrelated meanings, and that is a wart rather than a design. One is
+what happens when the width runs out. The other is whether a `RUID` may be compared
+against a bare integer. If you want one and not the other, the flag cannot currently say
+so.
 
-**Exactly one size flag can be on at a time.** Each one defines the same index type, so two of them
-is a duplicate definition rather than a wider index. The default is `u16_index`, which means picking
-a different size also means turning the default off:
+**Exactly one size flag can be on at a time.** Each one defines the same index type, so
+two of them is a duplicate definition rather than a wider index. The default is
+`u16_index`, which means picking a different size also means turning the default off:
 
 ```toml
 [dependencies]
-highroller = { version = "0.1", default-features = false, features = ["u32_index", "strict"] }
+highroller = { version = "0.2", default-features = false, features = ["u32_index", "strict"] }
 ```
 
-Turning the default off without naming a size leaves no index type at all. Both mistakes are caught
-at compile time with a message saying which one happened. The same constraint is why
-`cargo build --all-features` cannot work on this crate.
+Turning the default off without naming a size leaves no index type at all. Both mistakes
+are caught at compile time with a message saying which one happened. The same constraint
+is why `cargo build --all-features` cannot work on this crate.
+
+The chosen width is also exported as `highroller::Idx`, so code that stores an id can name
+its type without repeating the choice.
 
 ### RUID
-"Rolling Unique ID" (RUID) is a wrapper over the rolling index, with optional support for arithmetic 
-operations, and complete equivalence relation methods and display methods. You can use the `ruid_type` feature flag 
-to enable `RUID` and use it in your program. [Read more about `RUID` at the "Extras" section](#extras).
+
+`RUID` is the rolling index wearing a type of its own, and carrying a record of whether
+the counter really produced it. Enable `ruid_type`, and see [Extras](#extras).
 
 ## Example
 
-Consider a basic game where you summon digital fighters. Each summoned fighter needs to have a unique identifier. 
-Creating a complex UUID for each fighter could eat up valuable resources and cause performance issues in your game.
-
-That's where you can take advantage of `highroller` to assign unique identifiers. It is simple and efficient:
+Consider a game where you summon fighters. Each needs a name that is distinct for as long
+as the match runs, and nothing more than that, so a UUID per fighter would be paying for
+properties nobody uses.
 
 ```rust
+use highroller::Idx;
 use std::sync::{Arc, Mutex};
 use std::thread;
 
-// the index width is a compile-time choice, so the id type follows whichever size flag is set
+// `Idx` is whichever width the size flag selected, so this follows the choice rather
+// than repeating it
 #[derive(Clone)]
-struct Fighter<I> {
-  id: I,
+struct Fighter {
+  id: Idx,
   power: u32,
 }
 
-// create a register for fighters
 let fighters_register = Arc::new(Mutex::new(Vec::new()));
-
-// create four threads as four different arenas
 let arenas = 4;
 
-// gather 20 fighters for each arena
+// gather twenty fighters for each arena, on its own thread
 let mut handlers = Vec::new();
 for _ in 0..arenas {
   let fighters_register = Arc::clone(&fighters_register);
   handlers.push(thread::spawn(move || {
     let mut ids = Vec::new();
     for n in 0..20u32 {
-      let id = highroller::rolling_idx();
       let fighter = Fighter {
-        id,
+        id: highroller::rolling_idx(),
         power: (n * 37 + 11) % 100, // stand-in for a real power stat
       };
       ids.push(fighter.id);
@@ -113,89 +122,137 @@ for _ in 0..arenas {
   }));
 }
 
-// run a simple tournament that finds a champion for each arena
+// find a champion per arena
 let mut champions = Vec::with_capacity(arenas);
 for handler in handlers {
   let arena_fighters = handler.join().unwrap();
   let fighters = fighters_register.lock().unwrap();
-
-  // find the fighter with the highest power in each arena
   let champion = arena_fighters.iter()
     .map(|&id| fighters.iter().find(|fighter| fighter.id == id).unwrap())
     .max_by_key(|fighter| fighter.power)
     .unwrap()
     .clone();
-
   champions.push(champion);
 }
 
-// match the arena champions against each other for the ultimate champion
+// and then between the arenas
 let ultimate_champion = champions.into_iter()
   .max_by_key(|fighter| fighter.power)
   .unwrap();
 
-// print the winner by id
 println!("The ultimate champion is fighter with id: {}", ultimate_champion.id);
 ```
 
+Every fighter gets a distinct id, from four threads at once, without any of the machinery
+a UUID would bring. The index resets when the program does, so anything that has to
+survive a restart needs a different tool.
 
-In this example, each fighter we create gets a unique identifier from `highroller::rolling_idx()`. Since the rolling 
-index is incremental, each fighter gets a unique ID. This happens without any complex UUID or similar overhead, and 
-is practical to use.
+## Running out
 
-Please remember that the index resets every time your application restarts. If you need persistence across 
-application restarts, you will have to implement additional strategies.
+The index is as wide as the size flag says, so it has that many values and no more. What
+happens at the end is the `strict` flag's business, and the whole range is usable in
+either case.
 
-## The problem
+With `strict`, it panics, and keeps panicking. Without it, the index returns to zero and
+values start repeating, which is fine when ids only have to be distinct among things alive
+at the same time, and is not fine otherwise.
 
-At times, you need a very simple guaranteed unique identifier for something. Using UUIDs can be overkill
-and bring forward resource costs you likely don't need to afford, if your use case is very simple and not
-very extensive.
-
-In comes a static rolling counter.
-
-The concept is simple: Have a statically available rolling value, that automatically increments
-itself after each fetch. Add in some thread-safety measures and you have a very easy-to-use and
-practical guaranteedly unique identifier.
-
-Mainly useful for simple identification needs, it avoids a lot of complexities, and can be
-very cheap to run.
+At `u64_index` and `usize_index` the counter is no wider than the index, so exhaustion is
+not detectable there. It is also not reachable: a thousand million ids a second exhausts a
+64-bit index in about five hundred years.
 
 ## Extras
 
-With the `ruid_type` feature flag, you're able to use `RUID`s, or Rolling Unique Identifiers, as custom integer 
-types. You can convert a `RUID` to a standard integer or vice versa, compare two `RUID`s, manipulate `RUID`s with arithmetic operations if `allow_arithmetics` flag is on, and print `RUID`s as they implement the `fmt::Display` trait.
+With `ruid_type`, ids are `RUID`s rather than bare integers, which stops one being passed
+where another was meant. A `RUID` also says **where its value came from**, in its type.
 
-Example usage of `RUID` (requires the `ruid_type` feature, not enabled by default):
+```rust
+# #[cfg(feature = "ruid_type")]
+# {
+use highroller::{Derived, Idx, Rolled, RUID};
 
-```rust,ignore
-use highroller::RUID;
+// Rolled: the counter handed this out, so nothing else in this run holds it
+let id: RUID<Rolled> = RUID::new();
 
-let id1 = RUID::new();
-let id2 = RUID::new();
+// Derived: built from a number, so it carries no such promise
+// `Idx` follows whichever width the size flag chose, so this example does too
+let from_config: RUID<Derived> = RUID::from(7 as Idx);
 
-assert_ne!(id1, id2);
+assert!(id.is_rolled());
+assert!(!from_config.is_rolled());
+
+// they compare and hash alike, because two ids naming the same thing are the same id
+assert_ne!(id, from_config);
+# }
 ```
+
+`RUID<Rolled>` is the one with the guarantee, and `RUID` on its own means that one. The
+only way to obtain it is `RUID::new()`. There is no `From<Idx>` for it, no way to promote
+a derived id into one, and arithmetic on one produces a `RUID<Derived>`, because the
+result is a number the counter never handed out and might well collide with one it did.
+
+That distinction is the reason the type exists. Before it, `RUID::from(5)` produced
+something indistinguishable from a rolled id and `a + b` produced another, so the promise
+of uniqueness held only while nobody used the rest of the surface. Three compile-fail
+tests hold it now.
+
+A rolled id converts into a derived one whenever you want the value without the claim:
+
+```rust
+# #[cfg(feature = "ruid_type")]
+# {
+use highroller::{Derived, RUID};
+
+let id = RUID::new();
+let plain: RUID<Derived> = id.to_derived();
+assert_eq!(plain.get(), id.get()); // the value survives; the guarantee does not
+
+// `into_derived` is the same thing when the original is no longer wanted
+let consumed: RUID<Derived> = id.into_derived();
+assert_eq!(consumed, plain);
+# }
+```
+
+Beyond that a `RUID` behaves like the integer it holds: ordered, hashable, `Display` and
+`Debug`, and `Binary`, `Octal`, `LowerHex` and `UpperHex` with the format flags reaching
+through, plus `FromStr`, `Borrow<Idx>` and `AsRef<Idx>` so it can key a map that is looked
+up by index.
 
 #### `RUID` under the `const` feature
 
 `RUID::new()` becomes a `const fn`, so a `RUID` can be built where a constant is required:
 
-```rust,ignore
+```rust
+# #[cfg(all(feature = "ruid_type", feature = "const"))]
+# {
 use highroller::RUID;
 
 static ID: RUID = RUID::new();
 
-// no index has been rolled yet at this point. The first read takes one and keeps it, so
+// no index has been taken yet at this point. The first read takes one and keeps it, so
 // every later read agrees with the first.
 assert_eq!(ID.get(), ID.get());
+# }
 ```
 
-A `const fn` cannot roll an index, so the value starts out unassigned and takes one on first
-read. That needs somewhere to write the result, which costs two things this flag otherwise
-leaves alone: `RUID` is not `Copy` and does not implement `Deref`. Use `get()`, and clone where
-a value is needed twice. The lazy assignment is thread-safe, so a `RUID` shared between threads
-resolves to one index for all of them.
+A `const fn` cannot take an index, so the value starts unassigned and takes one on first
+read. That needs somewhere to write the result, which costs two things: `RUID` is not
+`Copy` and does not implement `Deref`. Use `get()`, and the reference forms of the
+operators (`&a + &b`) where a value is needed twice. The lazy assignment is thread-safe, so
+a `RUID` shared between threads resolves to one index for all of them.
+
+## Installation
+
+```bash
+cargo add highroller
+```
+
+Or in `Cargo.toml`:
+
+```toml
+[dependencies]
+highroller = "0.2"
+```
 
 ## Support
 
@@ -203,8 +260,10 @@ Whether you use this project, have learned something from it, or just like it, p
 
 <a href="https://buymeacoffee.com/orgrinrt" target="_blank"><img src="https://www.buymeacoffee.com/assets/img/custom_images/orange_img.png" alt="Buy Me A Coffee" style="height: auto !important;width: auto !important;" ></a>
 
-
 ## License
->You can check out the full license [here](https://github.com/orgrinrt/highroller/blob/main/LICENSE)
 
-This project is licensed under the terms of the **MPL-2.0** license.
+> The project is licensed under the **Mozilla Public License 2.0**.
+
+`SPDX-License-Identifier: MPL-2.0`
+
+> You can check out the full license [here](https://github.com/orgrinrt/highroller/blob/dev/LICENSE)
