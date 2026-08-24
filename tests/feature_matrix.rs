@@ -107,3 +107,25 @@ fn two_index_widths_at_once_are_refused_by_name() {
         "the refusal names the actual problem:\n{err}"
     );
 }
+
+/// Every index width builds, and builds its examples and benches too.
+///
+/// `check(&[])` above builds the library and nothing else, which is how
+/// `examples/taking_ids.rs` came to call `u128::from` on the index type: that compiles at
+/// five of the six widths and not at `usize_index`, where `usize` has no `From` into
+/// `u128`. Nothing in the suite compiled the example, so nothing said so. `--all-targets`
+/// is what says so.
+#[test]
+fn every_index_width_builds_its_examples_and_benches_too() {
+    for width in [
+        "u8_index",
+        "u16_index",
+        "u32_index",
+        "u64_index",
+        "u128_index",
+        "usize_index",
+    ] {
+        let (ok, err) = check(&["--all-targets", "--no-default-features", "--features", width]);
+        assert!(ok, "{width} builds every target:\n{err}");
+    }
+}
