@@ -91,17 +91,20 @@ fn threads_never_receive_the_same_index() {
 
 /// Whether the counter is wider than the index, which is what makes exhaustion visible.
 ///
-/// A runtime read of the same thing the crate decides at compile time. The tests below
-/// used to be gated on the feature name instead, which on wasm32 and i686 skipped exactly
-/// the configuration where the predicate had been wrong.
-const EXHAUSTION_IS_OBSERVABLE: bool =
-    core::mem::size_of::<Idx>() < core::mem::size_of::<u64>();
+/// The crate's own constant, not a copy of it. A copy asserted against itself agrees
+/// whatever the crate decides, so it passes under the very predicate the tests below
+/// exist to refuse.
+use crate::index::counter::EXHAUSTION_IS_OBSERVABLE;
 
+/// Only where a wider counter is the mechanism. At `u128_index` the constant is true for
+/// a different reason, a flag under the lock, and the width comparison says nothing there.
 #[test]
+#[cfg(not(feature = "u128_index"))]
 fn the_exhaustion_check_follows_the_width_and_not_the_feature_name() {
     // `usize_index` is 64 bits on this machine and 32 on wasm32 and i686, so a predicate
     // naming the feature and one measuring the width disagree there. The width is the
-    // question, and this is what says so.
+    // question, and this is what says so. Revert the crate's constant to
+    // `cfg!(feature = "usize_index")` and this fails here rather than only on wasm32.
     assert_eq!(
         EXHAUSTION_IS_OBSERVABLE,
         core::mem::size_of::<Idx>() < 8,

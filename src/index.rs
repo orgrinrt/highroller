@@ -28,7 +28,7 @@ pub const _ROLLING_IDX_MAX: Idx = Idx::MAX;
 // with the mutex kept as an arm, and the last row measures this function rather
 // than a copy of it written for the benchmark.
 #[cfg(not(feature = "u128_index"))]
-mod counter {
+pub(crate) mod counter {
     use super::Idx;
     #[cfg(any(feature = "strict", test))]
     use super::_ROLLING_IDX_MAX;
@@ -49,8 +49,8 @@ mod counter {
     /// maximum, whose answer is fixed at compile time; clippy denies that, correctly. It
     /// is also unreachable in practice: a thousand million ids a second exhausts a 64-bit
     /// index in about five hundred years.
-    #[cfg(feature = "strict")]
-    const EXHAUSTION_IS_OBSERVABLE: bool =
+    #[cfg(any(feature = "strict", test))]
+    pub(crate) const EXHAUSTION_IS_OBSERVABLE: bool =
         core::mem::size_of::<Idx>() < core::mem::size_of::<u64>();
 
     #[inline]
@@ -111,9 +111,14 @@ mod counter {
 // program that exhausts a `u64` index at one per nanosecond has been running for
 // five hundred years.
 #[cfg(feature = "u128_index")]
-mod counter {
+pub(crate) mod counter {
     use super::{Idx, _ROLLING_IDX_MAX};
     use std::sync::Mutex;
+
+    /// Always, at this width. The flag below is what a wider counter provides elsewhere,
+    /// so exhaustion is observable here for a different reason and not for none.
+    #[cfg(any(feature = "strict", test))]
+    pub(crate) const EXHAUSTION_IS_OBSERVABLE: bool = true;
 
     /// The counter, and whether the width has been used up.
     ///
