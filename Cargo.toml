@@ -20,10 +20,14 @@ repository = "https://github.com/orgrinrt/highroller"
 [dependencies]
 # Only under `no_alloc`, where it supplies the lending contract the batch API is written
 # against. Nothing else in the crate needs it, and the crate allocates nothing either way.
-# notko is not on crates.io yet, so this is a git dependency exactly as the rest of the
-# stack declares it. That has a consequence: crates.io refuses a git dependency whatever
-# its optionality, so a crate carrying `no_alloc` cannot be published until notko is.
-notko = { git = "ssh://git@github.com/orgrinrt/notko.git", branch = "dev", optional = true, default-features = false }
+notko = { version = "0.0.1", optional = true, default-features = false }
+
+# The feature combinations the release gate builds, lints and tests, in place of
+# `--all-features`, which enables two index widths at once and is refused above. Only
+# the combinations that are green today are declared; `test_suite_c`, `test_suite_d`
+# and the `no_std` builds of the test suite are not, and each is a defect of its own.
+[package.metadata.homma]
+feature_sets = [["u16_index", "strict"], ["test_suite_a"], ["test_suite_b"]]
 
 [features]
 default = ["u16_index", "strict"]
