@@ -100,7 +100,10 @@ pub(crate) mod counter {
     /// Places the counter past the last value, which is the exhausted state.
     #[cfg(test)]
     pub(crate) fn exhaust() {
-        COUNTER.store((_ROLLING_IDX_MAX as u64).saturating_add(1), Ordering::SeqCst);
+        COUNTER.store(
+            (_ROLLING_IDX_MAX as u64).saturating_add(1),
+            Ordering::SeqCst,
+        );
     }
 }
 

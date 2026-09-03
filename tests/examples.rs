@@ -43,7 +43,10 @@ fn two_counters_runs() {
 
 #[test]
 fn provenance_runs() {
-    let (ok, err) = run("provenance", &["u16_index", "ruid_type", "allow_arithmetics"]);
+    let (ok, err) = run(
+        "provenance",
+        &["u16_index", "ruid_type", "allow_arithmetics"],
+    );
     assert!(ok, "the example runs:\n{err}");
 }
 

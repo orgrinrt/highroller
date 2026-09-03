@@ -30,7 +30,10 @@ impl<'a> Pool<'a> {
     fn new(storage: &'a mut [Idx]) -> Self {
         let filled = fill_rolling_idx(storage);
         println!("reserved {filled} ids in one call");
-        Self { slots: storage, handed_out: 0 }
+        Self {
+            slots: storage,
+            handed_out: 0,
+        }
     }
 
     /// The next reserved id, if any are left.
@@ -67,5 +70,8 @@ fn main() {
     let issued: RUID<Rolled> = RUID::new();
     let computed: RUID<Derived> = issued.into();
     println!("issued {issued} is rolled: {}", issued.is_rolled());
-    println!("the same value as derived {computed} is rolled: {}", computed.is_rolled());
+    println!(
+        "the same value as derived {computed} is rolled: {}",
+        computed.is_rolled()
+    );
 }

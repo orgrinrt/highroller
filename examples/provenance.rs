@@ -21,7 +21,10 @@ fn main() {
 
     // A value that came in from outside is `Derived` too, by the same rule.
     let from_elsewhere = RUID::<Derived>::from(42);
-    println!("from outside {from_elsewhere}, rolled: {}", from_elsewhere.is_rolled());
+    println!(
+        "from outside {from_elsewhere}, rolled: {}",
+        from_elsewhere.is_rolled()
+    );
 
     // The assigning operators exist only on `Derived`. Applying one to a rolled id would
     // change it in place into a value the counter never produced, which is the hole the

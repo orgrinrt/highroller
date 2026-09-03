@@ -93,7 +93,10 @@ pub struct RUID<P: Provenance = Rolled> {
 impl<P: Provenance> RUID<P> {
     #[inline]
     const fn wrap(value: Idx) -> Self {
-        Self { value, provenance: PhantomData }
+        Self {
+            value,
+            provenance: PhantomData,
+        }
     }
 
     /// The underlying index.
@@ -110,7 +113,10 @@ impl<P: Provenance> RUID<P> {
     fn wrap(value: Idx) -> Self {
         let cell = std::sync::OnceLock::new();
         let _ = cell.set(value);
-        Self { value: cell, provenance: PhantomData }
+        Self {
+            value: cell,
+            provenance: PhantomData,
+        }
     }
 
     /// The underlying index, taking one on the first call and keeping it after.
@@ -146,9 +152,11 @@ impl RUID<Rolled> {
     #[inline]
     #[must_use]
     pub const fn new() -> Self {
-        Self { value: std::sync::OnceLock::new(), provenance: PhantomData }
+        Self {
+            value: std::sync::OnceLock::new(),
+            provenance: PhantomData,
+        }
     }
-
 }
 
 #[cfg(not(feature = "const"))]

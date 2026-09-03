@@ -64,7 +64,11 @@ fn a_run_of_indices_is_free_of_repeats() {
     let mut sorted = taken.clone();
     sorted.sort_unstable();
     sorted.dedup();
-    assert_eq!(sorted.len(), budget, "every index in a run differs from every other");
+    assert_eq!(
+        sorted.len(),
+        budget,
+        "every index in a run differs from every other"
+    );
 }
 
 #[test]
@@ -76,7 +80,10 @@ fn threads_never_receive_the_same_index() {
     // contend as hard as the machine allows.
     let taken: Vec<Idx> = std::thread::scope(|s| {
         let handles: Vec<_> = (0..budget).map(|_| s.spawn(rolling_idx)).collect();
-        handles.into_iter().map(|h| h.join().expect("no thread panics")).collect()
+        handles
+            .into_iter()
+            .map(|h| h.join().expect("no thread panics"))
+            .collect()
     });
     let mut sorted = taken.clone();
     sorted.sort_unstable();
@@ -219,9 +226,9 @@ fn the_last_value_of_the_width_is_handed_out() {
 #[cfg(feature = "ruid_type")]
 mod ruid {
     use super::*;
+    use crate::{Derived, Provenance, Rolled};
     use std::collections::hash_map::DefaultHasher;
     use std::hash::{Hash, Hasher};
-    use crate::{Derived, Provenance, Rolled};
 
     fn hash_of<P: Provenance>(id: &RUID<P>) -> u64 {
         let mut h = DefaultHasher::new();
@@ -254,7 +261,11 @@ mod ruid {
         let rolled = RUID::new();
         let value = rolled.get();
         let derived: RUID<Derived> = rolled.into_derived();
-        assert_eq!(derived.get(), value, "demoting forgets the guarantee, not the value");
+        assert_eq!(
+            derived.get(),
+            value,
+            "demoting forgets the guarantee, not the value"
+        );
         assert!(!derived.is_rolled());
     }
 
@@ -264,7 +275,10 @@ mod ruid {
         let budget = distinct_budget().min(256);
         let taken: Vec<RUID<Rolled>> = std::thread::scope(|s| {
             let handles: Vec<_> = (0..budget).map(|_| s.spawn(RUID::new)).collect();
-            handles.into_iter().map(|h| h.join().expect("no thread panics")).collect()
+            handles
+                .into_iter()
+                .map(|h| h.join().expect("no thread panics"))
+                .collect()
         });
         let mut values: Vec<Idx> = taken.iter().map(RUID::get).collect();
         values.sort_unstable();
@@ -276,7 +290,11 @@ mod ruid {
     fn reading_a_ruid_twice_gives_the_same_answer() {
         let _g = serial();
         let id = RUID::new();
-        assert_eq!(id.get(), id.get(), "a RUID holds an index, it does not take one per read");
+        assert_eq!(
+            id.get(),
+            id.get(),
+            "a RUID holds an index, it does not take one per read"
+        );
     }
 
     #[test]
@@ -296,7 +314,10 @@ mod ruid {
         let _g = serial();
         let first = RUID::new();
         let second = RUID::new();
-        assert!(first < second, "ids are ordered the way the indices they hold are");
+        assert!(
+            first < second,
+            "ids are ordered the way the indices they hold are"
+        );
         assert_eq!(first.cmp(&second), first.get().cmp(&second.get()));
     }
 
@@ -305,7 +326,10 @@ mod ruid {
         let _g = serial();
         let rolled = RUID::new();
         let same_value = derived(rolled.get() as u8);
-        assert_eq!(rolled, same_value, "two ids naming the same thing are the same id");
+        assert_eq!(
+            rolled, same_value,
+            "two ids naming the same thing are the same id"
+        );
         assert_eq!(
             hash_of(&rolled),
             hash_of(&same_value),
@@ -358,7 +382,10 @@ mod ruid {
         let _g = serial();
         let a = RUID::default();
         let b = RUID::default();
-        assert_ne!(a, b, "a defaulted RUID is a real id, not a zero placeholder");
+        assert_ne!(
+            a, b,
+            "a defaulted RUID is a real id, not a zero placeholder"
+        );
         assert!(a.is_rolled());
     }
 
@@ -423,7 +450,11 @@ mod ruid {
     fn assigning_arithmetic_matches_its_operator() {
         let _g = serial();
         for (name, apply, expected) in [
-            ("add", (|x: &mut RUID<Derived>| *x += 3 as Idx) as fn(&mut RUID<Derived>), 13 as Idx),
+            (
+                "add",
+                (|x: &mut RUID<Derived>| *x += 3 as Idx) as fn(&mut RUID<Derived>),
+                13 as Idx,
+            ),
             ("sub", |x: &mut RUID<Derived>| *x -= 3 as Idx, 7),
             ("mul", |x: &mut RUID<Derived>| *x *= 3 as Idx, 30),
             ("div", |x: &mut RUID<Derived>| *x /= 3 as Idx, 3),
@@ -468,7 +499,11 @@ mod ruid {
             let _g = serial();
             let original = RUID::new();
             let copy = original.clone();
-            assert_eq!(original.get(), copy.get(), "a clone is the same id, not the next one");
+            assert_eq!(
+                original.get(),
+                copy.get(),
+                "a clone is the same id, not the next one"
+            );
         }
     }
 }

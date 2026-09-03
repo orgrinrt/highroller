@@ -112,7 +112,9 @@ fn eight_threads_taking_sixty_four_each_get_no_repeat() {
     // interleaving the machine happens to produce, and a sleep would only make one
     // interleaving likelier rather than proving anything about the rest.
     let handles: Vec<_> = (0..8)
-        .map(|_| std::thread::spawn(|| (0..64).map(|_| threaded::rolling_idx()).collect::<Vec<_>>()))
+        .map(|_| {
+            std::thread::spawn(|| (0..64).map(|_| threaded::rolling_idx()).collect::<Vec<_>>())
+        })
         .collect();
 
     let mut all = Vec::new();
