@@ -6,26 +6,30 @@
 //! and under threads, because a lock's cost is mostly invisible until it is
 //! contended.
 //!
-//! The arms are the alternatives somebody might actually choose, not a strawman:
+//! The arms are the alternatives somebody might actually choose, not a
+//! strawman:
 //!
 //! - `mutex` is what the crate shipped.
 //! - `fetch_update` is a compare-and-swap loop, and is the arm that keeps the
-//!   crate's exact value sequence, including its habit of never handing out MAX.
+//!   crate's exact value sequence, including its habit of never handing out
+//!   MAX.
 //! - `fetch_add` is the cheapest thing the hardware offers, and hands out the
 //!   full range, so it is a behaviour change rather than a drop-in.
-//! - `shipped` is `highroller::rolling_idx` itself, and is the row any claim about this
-//!   crate's cost has to come from. An earlier version of this file had an arm called
-//!   `wide_masked` standing in for it, and the stand-in was wrong twice over: it masked,
-//!   where the shipped path does not, the mask having been found dead and removed; and
-//!   its strict variant declared an early return "unreachable in the benchmark" while a
-//!   shared static that three earlier arms increment carried it past the trip point, so
-//!   934,464 of a million calls took it. The numbers were attributed to code nobody runs.
+//! - `shipped` is `highroller::rolling_idx` itself, and is the row any claim
+//!   about this crate's cost has to come from. An earlier version of this file
+//!   had an arm called `wide_masked` standing in for it, and the stand-in was
+//!   wrong twice over: it masked, where the shipped path does not, the mask
+//!   having been found dead and removed; and its strict variant declared an
+//!   early return "unreachable in the benchmark" while a shared static that
+//!   three earlier arms increment carried it past the trip point, so 934,464 of
+//!   a million calls took it. The numbers were attributed to code nobody runs.
 
-use criterion::{criterion_group, criterion_main, BenchmarkId, Criterion, Throughput};
 use std::hint::black_box;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Mutex;
 use std::thread;
+
+use criterion::{criterion_group, criterion_main, BenchmarkId, Criterion, Throughput};
 
 static MUTEX_IDX: Mutex<u64> = Mutex::new(0);
 static ATOMIC_IDX: AtomicU64 = AtomicU64::new(0);
@@ -48,7 +52,11 @@ fn atomic_fetch_update() -> u64 {
             Some(if v == MAX { 1 } else { v + 1 })
         })
         .expect("the closure returns Some for every input, so this cannot fail");
-    if prev == MAX { 0 } else { prev }
+    if prev == MAX {
+        0
+    } else {
+        prev
+    }
 }
 
 fn atomic_fetch_add() -> u64 {
@@ -57,8 +65,9 @@ fn atomic_fetch_add() -> u64 {
 
 /// The crate's own function, which is what the headline number must describe.
 ///
-/// The bench crate is built with whichever width feature is selected, so this measures
-/// exactly the code a consumer calls, including the lock on the `u128` width.
+/// The bench crate is built with whichever width feature is selected, so this
+/// measures exactly the code a consumer calls, including the lock on the `u128`
+/// width.
 fn shipped() -> highroller::Idx {
     highroller::rolling_idx()
 }
@@ -67,7 +76,9 @@ fn uncontended(c: &mut Criterion) {
     let mut g = c.benchmark_group("one thread");
     g.throughput(Throughput::Elements(1));
     g.bench_function("mutex", |b| b.iter(|| black_box(mutex_roll())));
-    g.bench_function("fetch_update", |b| b.iter(|| black_box(atomic_fetch_update())));
+    g.bench_function("fetch_update", |b| {
+        b.iter(|| black_box(atomic_fetch_update()))
+    });
     g.bench_function("fetch_add", |b| b.iter(|| black_box(atomic_fetch_add())));
     g.bench_function("shipped", |b| b.iter(|| black_box(shipped())));
     g.finish();
@@ -92,9 +103,9 @@ fn contended(c: &mut Criterion) {
             g.bench_with_input(BenchmarkId::new(name, threads), &threads, |b, &n| {
                 b.iter(|| {
                     thread::scope(|s| {
-                        for _ in 0..n {
+                        for _ in 0 .. n {
                             s.spawn(|| {
-                                for _ in 0..PER_THREAD {
+                                for _ in 0 .. PER_THREAD {
                                     black_box(f());
                                 }
                             });

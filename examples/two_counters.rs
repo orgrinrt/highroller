@@ -1,8 +1,8 @@
 //! Two counters in one program, at two widths.
 //!
-//! The crate's own counter has its width chosen by a cargo feature, and a feature is
-//! chosen once for a whole build graph. `declare_rolling_idx!` is how a program gets more
-//! than one, or a width its consumer did not agree to.
+//! The crate's own counter has its width chosen by a cargo feature, and a
+//! feature is chosen once for a whole build graph. `declare_rolling_idx!` is
+//! how a program gets more than one, or a width its consumer did not agree to.
 //!
 //! ```text
 //! cargo run --example two_counters

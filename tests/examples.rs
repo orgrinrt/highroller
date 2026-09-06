@@ -1,11 +1,13 @@
 //! Every example runs, and exits zero.
 //!
-//! An example that no longer compiles is documentation that lies, and nothing else in a
-//! normal `cargo test` looks at one: `cargo test` builds examples but does not run them, so
-//! an example that compiles and then panics is invisible. These run them.
+//! An example that no longer compiles is documentation that lies, and nothing
+//! else in a normal `cargo test` looks at one: `cargo test` builds examples but
+//! does not run them, so an example that compiles and then panics is invisible.
+//! These run them.
 //!
-//! Each carries the feature set it needs, which is the same set `required-features` declares
-//! in the manifest, so a mismatch between the two shows up here.
+//! Each carries the feature set it needs, which is the same set
+//! `required-features` declares in the manifest, so a mismatch between the two
+//! shows up here.
 
 use std::process::Command;
 
@@ -43,7 +45,11 @@ fn two_counters_runs() {
 
 #[test]
 fn provenance_runs() {
-    let (ok, err) = run("provenance", &["u16_index", "ruid_type", "allow_arithmetics"]);
+    let (ok, err) = run("provenance", &[
+        "u16_index",
+        "ruid_type",
+        "allow_arithmetics",
+    ]);
     assert!(ok, "the example runs:\n{err}");
 }
 

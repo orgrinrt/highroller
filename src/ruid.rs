@@ -1,28 +1,30 @@
-//! `RUID`: a rolled index wearing a type of its own, and a record of where it came from.
+//! `RUID`: a rolled index wearing a type of its own, and a record of where it
+//! came from.
 //!
-//! The type used to promise more than it could keep. It was described as a runtime-unique
-//! id, and `RUID::from(5)` made one out of nothing, while `a + b` made another out of two
-//! more. Both produced a value indistinguishable from a rolled one, so the guarantee held
-//! only for as long as nobody used the rest of the surface.
+//! The type used to promise more than it could keep. It was described as a
+//! runtime-unique id, and `RUID::from(5)` made one out of nothing, while `a +
+//! b` made another out of two more. Both produced a value indistinguishable
+//! from a rolled one, so the guarantee held only for as long as nobody used the
+//! rest of the surface.
 //!
-//! What closes that is saying where a value came from, in its type. `RUID<Rolled>` is one
-//! the counter handed out, and no safe path constructs one from anything else. Copies of
-//! an existing rolled id are of course still rolled ids.
-//! `RUID<Derived>` is anything else: built from an integer, parsed, or computed. The two
-//! compare and print alike, and a rolled id converts into a derived one freely because it
-//! genuinely is one, but nothing goes the other way.
+//! What closes that is saying where a value came from, in its type.
+//! `RUID<Rolled>` is one the counter handed out, and no safe path constructs
+//! one from anything else. Copies of an existing rolled id are of course still
+//! rolled ids. `RUID<Derived>` is anything else: built from an integer, parsed,
+//! or computed. The two compare and print alike, and a rolled id converts into
+//! a derived one freely because it genuinely is one, but nothing goes the other
+//! way.
 
-use crate::{rolling_idx, Idx};
 use core::cmp::Ordering;
 use core::fmt;
 use core::marker::PhantomData;
-use core::str::FromStr;
-
 #[cfg(not(feature = "const"))]
 use core::ops::Deref;
-
 #[cfg(feature = "allow_arithmetics")]
 use core::ops::{Add, AddAssign, Div, DivAssign, Mul, MulAssign, Rem, RemAssign, Sub, SubAssign};
+use core::str::FromStr;
+
+use crate::{rolling_idx, Idx};
 
 mod sealed {
     pub trait Sealed {}
@@ -32,27 +34,27 @@ mod sealed {
 
 /// Where a `RUID`'s value came from.
 ///
-/// Sealed: the two answers below are the only ones, and a third would be a claim this
-/// crate has no way to check.
+/// Sealed: the two answers below are the only ones, and a third would be a
+/// claim this crate has no way to check.
 pub trait Provenance: sealed::Sealed {
     /// Whether values carrying this provenance came from the rolling index.
     const ROLLED: bool;
 }
 
-/// The value came from the rolling index, so no other rolled id was *issued* this value in
-/// this run.
+/// The value came from the rolling index, so no other rolled id was *issued*
+/// this value in this run.
 ///
-/// [`RUID::new`] is the only thing that produces one. Copying or cloning an existing one
-/// naturally gives another holding the same value, which is what makes it behave like the
-/// value it is; what cannot happen is a rolled id carrying something the counter never
-/// handed out.
+/// [`RUID::new`] is the only thing that produces one. Copying or cloning an
+/// existing one naturally gives another holding the same value, which is what
+/// makes it behave like the value it is; what cannot happen is a rolled id
+/// carrying something the counter never handed out.
 #[derive(Debug)]
 pub enum Rolled {}
 
 /// The value came from somewhere else: an integer, a parse, or arithmetic.
 ///
-/// It may collide with anything. That is not a defect in it, it is why it is not called
-/// `Rolled`.
+/// It may collide with anything. That is not a defect in it, it is why it is
+/// not called `Rolled`.
 #[derive(Debug)]
 pub enum Derived {}
 
@@ -66,34 +68,39 @@ impl Provenance for Derived {
 
 /// A rolling unique id.
 ///
-/// The parameter records where the value came from and defaults to [`Rolled`], so a bare
-/// `RUID` means the kind carrying the guarantee.
+/// The parameter records where the value came from and defaults to [`Rolled`],
+/// so a bare `RUID` means the kind carrying the guarantee.
 #[cfg(not(feature = "const"))]
 pub struct RUID<P: Provenance = Rolled> {
-    value: Idx,
+    value:      Idx,
     provenance: PhantomData<P>,
 }
 
 /// A rolling unique id, taking its value on first read.
 ///
-/// The `const` feature makes [`RUID::new`] a `const fn`, so a `RUID` can be a `static` or
-/// an associated constant. Taking an index needs a shared counter and cannot happen at
-/// compile time, so the value starts unassigned and the first read takes one.
+/// The `const` feature makes [`RUID::new`] a `const fn`, so a `RUID` can be a
+/// `static` or an associated constant. Taking an index needs a shared counter
+/// and cannot happen at compile time, so the value starts unassigned and the
+/// first read takes one.
 #[cfg(feature = "const")]
 pub struct RUID<P: Provenance = Rolled> {
-    value: std::sync::OnceLock<Idx>,
+    value:      crate::lazy::Lazy,
     provenance: PhantomData<P>,
 }
 
-// The field is private and there is no `From<Idx> for RUID<Rolled>`, which together are
-// what make the parameter mean anything: a `RUID<Rolled>` is reachable only by asking the
-// counter. Every constructor below that takes a value produces a `Derived`.
+// The field is private and there is no `From<Idx> for RUID<Rolled>`, which
+// together are what make the parameter mean anything: a `RUID<Rolled>` is
+// reachable only by asking the counter. Every constructor below that takes a
+// value produces a `Derived`.
 
 #[cfg(not(feature = "const"))]
 impl<P: Provenance> RUID<P> {
     #[inline]
     const fn wrap(value: Idx) -> Self {
-        Self { value, provenance: PhantomData }
+        Self {
+            value,
+            provenance: PhantomData,
+        }
     }
 
     /// The underlying index.
@@ -108,29 +115,33 @@ impl<P: Provenance> RUID<P> {
 impl<P: Provenance> RUID<P> {
     #[inline]
     fn wrap(value: Idx) -> Self {
-        let cell = std::sync::OnceLock::new();
-        let _ = cell.set(value);
-        Self { value: cell, provenance: PhantomData }
+        Self {
+            value:      crate::lazy::Lazy::with(value),
+            provenance: PhantomData,
+        }
     }
 
     /// The underlying index, taking one on the first call and keeping it after.
     ///
-    /// One implementation serves both provenances. A derived id is assigned when it is
-    /// made, so the cell is already full and the closure never runs; a rolled one starts
-    /// empty and fills here. Two threads reading an unassigned id at once agree on the
-    /// answer, because one wins the initialisation and the other sees the winner's value.
+    /// One implementation serves both provenances. A derived id is assigned
+    /// when it is made, so the cell is already full and the closure never
+    /// runs; a rolled one starts empty and fills here. Two threads reading
+    /// an unassigned id at once agree on the answer, because one wins the
+    /// initialisation and the other sees the winner's value. Under `std`
+    /// the loser parks; under `no_std` it spins, for the length of one atomic
+    /// add.
     #[inline]
     #[must_use]
     pub fn get(&self) -> Idx {
-        *self.value.get_or_init(rolling_idx)
+        self.value.get_or_init(rolling_idx)
     }
 }
 
 impl<P: Provenance> RUID<P> {
     /// Whether this id came from the rolling index.
     ///
-    /// The answer is fixed by the type, so this is for generic code holding a `RUID<P>`
-    /// that wants to report which kind it has.
+    /// The answer is fixed by the type, so this is for generic code holding a
+    /// `RUID<P>` that wants to report which kind it has.
     #[inline]
     #[must_use]
     pub const fn is_rolled(&self) -> bool {
@@ -140,15 +151,18 @@ impl<P: Provenance> RUID<P> {
 
 #[cfg(feature = "const")]
 impl RUID<Rolled> {
-    /// Constructs an unassigned id, which takes its index the first time it is read.
+    /// Constructs an unassigned id, which takes its index the first time it is
+    /// read.
     ///
     /// This is the `const fn` the feature exists for.
     #[inline]
     #[must_use]
     pub const fn new() -> Self {
-        Self { value: std::sync::OnceLock::new(), provenance: PhantomData }
+        Self {
+            value:      crate::lazy::Lazy::new(),
+            provenance: PhantomData,
+        }
     }
-
 }
 
 #[cfg(not(feature = "const"))]
@@ -164,9 +178,10 @@ impl RUID<Rolled> {
 impl RUID<Rolled> {
     /// Forgets the guarantee, keeping the value.
     ///
-    /// A rolled id is a perfectly good derived one, so this always succeeds. There is
-    /// deliberately no way back: nothing this crate could check would turn a value that
-    /// came from elsewhere into one the counter handed out.
+    /// A rolled id is a perfectly good derived one, so this always succeeds.
+    /// There is deliberately no way back: nothing this crate could check
+    /// would turn a value that came from elsewhere into one the counter
+    /// handed out.
     #[inline]
     #[must_use]
     pub fn into_derived(self) -> RUID<Derived> {
@@ -175,9 +190,9 @@ impl RUID<Rolled> {
 
     /// The same, without giving up the original.
     ///
-    /// `into_derived` consumes, which is free when `RUID` is `Copy` and is a real cost
-    /// under the `const` feature, where it is not. A readme example caught that by
-    /// failing to compile.
+    /// `into_derived` consumes, which is free when `RUID` is `Copy` and is a
+    /// real cost under the `const` feature, where it is not. A readme
+    /// example caught that by failing to compile.
     #[inline]
     #[must_use]
     pub fn to_derived(&self) -> RUID<Derived> {
@@ -186,21 +201,24 @@ impl RUID<Rolled> {
 }
 
 impl Default for RUID<Rolled> {
-    /// The same as `new`, so a `RUID` inside a `#[derive(Default)]` type still gets an id
-    /// rather than a zero that collides with every other default.
+    /// The same as `new`, so a `RUID` inside a `#[derive(Default)]` type still
+    /// gets an id rather than a zero that collides with every other
+    /// default.
     #[inline]
     fn default() -> Self {
         Self::new()
     }
 }
 
-// There is deliberately no `Default for RUID<Derived>`. A default derived id would be
-// zero, which collides with every other default and with the counter's own first value,
-// and having two `Default` impls also made the bare `RUID::default()` ambiguous.
+// There is deliberately no `Default for RUID<Derived>`. A default derived id
+// would be zero, which collides with every other default and with the counter's
+// own first value, and having two `Default` impls also made the bare
+// `RUID::default()` ambiguous.
 
-// A rolled id is copied rather than cloned, so passing one around neither consumes it nor
-// takes a new index. Under `const` the value lives in a `OnceLock`, which cannot be
-// copied, and cloning is what remains.
+// A rolled id is copied rather than cloned, so passing one around neither
+// consumes it nor takes a new index. Under `const` the value lives in a cell
+// that fills on first read, which cannot be copied, and cloning is what
+// remains.
 #[cfg(not(feature = "const"))]
 impl<P: Provenance> Copy for RUID<P> {}
 
@@ -216,8 +234,9 @@ impl<P: Provenance> Clone for RUID<P> {
 impl<P: Provenance> Clone for RUID<P> {
     /// Clones the id, taking one first if it has not been read yet.
     ///
-    /// The clone carries the same id rather than the next one, which is what makes a
-    /// `RUID` behave like the value it is rather than like a generator.
+    /// The clone carries the same id rather than the next one, which is what
+    /// makes a `RUID` behave like the value it is rather than like a
+    /// generator.
     fn clone(&self) -> Self {
         Self::wrap(self.get())
     }
@@ -250,8 +269,9 @@ impl<P: Provenance> AsRef<Idx> for RUID<P> {
     }
 }
 
-// Comparison ignores provenance, because two ids are the same id when they name the same
-// thing. Separating them here would let a map hold both and answer for neither.
+// Comparison ignores provenance, because two ids are the same id when they name
+// the same thing. Separating them here would let a map hold both and answer for
+// neither.
 impl<P: Provenance, Q: Provenance> PartialEq<RUID<Q>> for RUID<P> {
     #[inline]
     fn eq(&self, other: &RUID<Q>) -> bool {
@@ -276,17 +296,18 @@ impl<P: Provenance> Ord for RUID<P> {
 }
 
 impl<P: Provenance> core::hash::Hash for RUID<P> {
-    /// Hashes as the underlying index, so `Hash` agrees with `Eq` across provenance and a
-    /// `RUID` keys a map the way the integer would.
+    /// Hashes as the underlying index, so `Hash` agrees with `Eq` across
+    /// provenance and a `RUID` keys a map the way the integer would.
     #[inline]
     fn hash<H: core::hash::Hasher>(&self, state: &mut H) {
         self.get().hash(state);
     }
 }
 
-// Comparing against a bare integer is what `strict` withholds. The flag carries two
-// unrelated meanings, and this is the second: what happens when the width runs out, and
-// whether an id is opaque. One flag for both is a wart, named rather than papered over.
+// Comparing against a bare integer is what `strict` withholds. The flag carries
+// two unrelated meanings, and this is the second: what happens when the width
+// runs out, and whether an id is opaque. One flag for both is a wart, named
+// rather than papered over.
 #[cfg(not(feature = "strict"))]
 impl<P: Provenance> PartialEq<Idx> for RUID<P> {
     #[inline]
@@ -314,8 +335,8 @@ macro_rules! formatting {
     )+};
 }
 
-// Delegating rather than reimplementing means width, padding and the `#` flag all behave
-// the way they do on the integer, instead of being silently dropped.
+// Delegating rather than reimplementing means width, padding and the `#` flag
+// all behave the way they do on the integer, instead of being silently dropped.
 formatting!(Display, Binary, Octal, LowerHex, UpperHex);
 
 impl<P: Provenance> fmt::Debug for RUID<P> {
@@ -325,8 +346,9 @@ impl<P: Provenance> fmt::Debug for RUID<P> {
 }
 
 impl From<Idx> for RUID<Derived> {
-    /// Wraps an index already in hand. This takes no new index, and the result is
-    /// `Derived` because nothing here checks that the counter ever produced it.
+    /// Wraps an index already in hand. This takes no new index, and the result
+    /// is `Derived` because nothing here checks that the counter ever
+    /// produced it.
     #[inline]
     fn from(value: Idx) -> Self {
         Self::wrap(value)
@@ -359,13 +381,13 @@ impl FromStr for RUID<Derived> {
 
 /// The arithmetic operators, which are all the same shape.
 ///
-/// Every one produces a `RUID<Derived>` whatever it was given, and that is the point
-/// rather than a limitation. Adding two ids gives a number the counter never handed out,
-/// and which may well collide with one it did, so a result claiming to be `Rolled` would
-/// be claiming something false.
+/// Every one produces a `RUID<Derived>` whatever it was given, and that is the
+/// point rather than a limitation. Adding two ids gives a number the counter
+/// never handed out, and which may well collide with one it did, so a result
+/// claiming to be `Rolled` would be claiming something false.
 ///
-/// Writing them out one at a time was 250 lines in which no reader could have spotted a
-/// transposed operator, so they are generated from the list instead.
+/// Writing them out one at a time was 250 lines in which no reader could have
+/// spotted a transposed operator, so they are generated from the list instead.
 #[cfg(feature = "allow_arithmetics")]
 macro_rules! arithmetic {
     ($( $op:ident $fn_name:ident $assign:ident $assign_fn:ident $sym:tt ),+ $(,)?) => {$(
@@ -385,7 +407,7 @@ macro_rules! arithmetic {
             }
         }
 
-        // The same two by reference. Under `const` a `RUID` holds a `OnceLock` and cannot
+        // The same two by reference. Under `const` a `RUID` holds a lazy cell and cannot
         // be `Copy`, so every by-value operator consumes it: `a + b` leaves neither
         // usable and `a + 1` afterwards does not compile. Without these, `const` and
         // `allow_arithmetics` together are close to unusable, and they are one of the
