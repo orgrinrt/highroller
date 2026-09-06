@@ -83,8 +83,8 @@ macro_rules! declare_rolling_idx {
         #[allow(dead_code)]
         #[inline]
         pub fn rolling_idx() -> $t {
-            let previous = __ROLLING_IDX_COUNTER
-                .fetch_add(1, ::core::sync::atomic::Ordering::Relaxed);
+            let previous =
+                __ROLLING_IDX_COUNTER.fetch_add(1, ::core::sync::atomic::Ordering::Relaxed);
             // The narrowing cast is the wrap. Every width's range is a power of two, so
             // reducing the wide counter modulo that range is what the cast already does.
             previous as $t

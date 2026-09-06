@@ -48,7 +48,11 @@ fn atomic_fetch_update() -> u64 {
             Some(if v == MAX { 1 } else { v + 1 })
         })
         .expect("the closure returns Some for every input, so this cannot fail");
-    if prev == MAX { 0 } else { prev }
+    if prev == MAX {
+        0
+    } else {
+        prev
+    }
 }
 
 fn atomic_fetch_add() -> u64 {
@@ -67,7 +71,9 @@ fn uncontended(c: &mut Criterion) {
     let mut g = c.benchmark_group("one thread");
     g.throughput(Throughput::Elements(1));
     g.bench_function("mutex", |b| b.iter(|| black_box(mutex_roll())));
-    g.bench_function("fetch_update", |b| b.iter(|| black_box(atomic_fetch_update())));
+    g.bench_function("fetch_update", |b| {
+        b.iter(|| black_box(atomic_fetch_update()))
+    });
     g.bench_function("fetch_add", |b| b.iter(|| black_box(atomic_fetch_add())));
     g.bench_function("shipped", |b| b.iter(|| black_box(shipped())));
     g.finish();

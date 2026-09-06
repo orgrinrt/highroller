@@ -83,14 +83,7 @@ fn every_index_width_builds_on_its_own() {
     // The width features are mutually exclusive and each defines the same items, so the
     // manifest's guard is the only thing standing between a wrong pair and a wall of
     // duplicate-definition errors naming internals. Each one alone has to work.
-    for width in [
-        "u8_index",
-        "u16_index",
-        "u32_index",
-        "u64_index",
-        "u128_index",
-        "usize_index",
-    ] {
+    for width in ["u8_index", "u16_index", "u32_index", "u64_index", "u128_index", "usize_index"] {
         let (ok, err) = check(&["--no-default-features", "--features", width]);
         assert!(ok, "{width} builds on its own:\n{err}");
     }
@@ -117,14 +110,7 @@ fn two_index_widths_at_once_are_refused_by_name() {
 /// is what says so.
 #[test]
 fn every_index_width_builds_its_examples_and_benches_too() {
-    for width in [
-        "u8_index",
-        "u16_index",
-        "u32_index",
-        "u64_index",
-        "u128_index",
-        "usize_index",
-    ] {
+    for width in ["u8_index", "u16_index", "u32_index", "u64_index", "u128_index", "usize_index"] {
         let (ok, err) = check(&["--all-targets", "--no-default-features", "--features", width]);
         assert!(ok, "{width} builds every target:\n{err}");
     }

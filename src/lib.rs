@@ -96,21 +96,41 @@ pub type Idx = u16;
 #[cfg(all(feature = "u32_index", not(any(feature = "u8_index", feature = "u16_index"))))]
 pub type Idx = u32;
 /// The integer the rolling index is made of, chosen by the width feature.
-#[cfg(all(feature = "u64_index", not(any(feature = "u8_index", feature = "u16_index", feature = "u32_index"))))]
+#[cfg(all(
+    feature = "u64_index",
+    not(any(feature = "u8_index", feature = "u16_index", feature = "u32_index"))
+))]
 pub type Idx = u64;
 /// The integer the rolling index is made of, chosen by the width feature.
-#[cfg(all(feature = "u128_index", not(any(feature = "u8_index", feature = "u16_index", feature = "u32_index", feature = "u64_index"))))]
+#[cfg(all(
+    feature = "u128_index",
+    not(any(
+        feature = "u8_index",
+        feature = "u16_index",
+        feature = "u32_index",
+        feature = "u64_index"
+    ))
+))]
 pub type Idx = u128;
 /// The integer the rolling index is made of, chosen by the width feature.
-#[cfg(all(feature = "usize_index", not(any(feature = "u8_index", feature = "u16_index", feature = "u32_index", feature = "u64_index", feature = "u128_index"))))]
+#[cfg(all(
+    feature = "usize_index",
+    not(any(
+        feature = "u8_index",
+        feature = "u16_index",
+        feature = "u32_index",
+        feature = "u64_index",
+        feature = "u128_index"
+    ))
+))]
 pub type Idx = usize;
 
-mod index;
 pub mod declare;
+mod index;
 
-pub use index::{reset_rolling_idx, rolling_idx, _ROLLING_IDX_MAX};
 #[cfg(feature = "no_alloc")]
 pub use index::fill_rolling_idx;
+pub use index::{reset_rolling_idx, rolling_idx, _ROLLING_IDX_MAX};
 
 #[cfg(feature = "ruid_type")]
 mod ruid;

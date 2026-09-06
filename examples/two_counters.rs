@@ -20,7 +20,7 @@ fn main() {
     println!("tickets are {} wide", tickets::_ROLLING_IDX_MAX);
     println!("sessions are {} wide", sessions::_ROLLING_IDX_MAX);
 
-    for _ in 0 .. 3 {
+    for _ in 0..3 {
         println!("ticket {}", tickets::rolling_idx());
     }
 

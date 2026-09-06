@@ -42,12 +42,12 @@ fn a_slice_out_of_a_larger_region_is_lent_like_anything_else() {
     // filler does not ask where it came from.
     reset_rolling_idx();
     let mut arena = [0 as Idx; 16];
-    let region: &mut [Idx] = &mut arena[4 .. 8];
+    let region: &mut [Idx] = &mut arena[4..8];
     assert_eq!(fill_rolling_idx(region), 4);
 
-    assert_eq!(&arena[4 .. 8], &[0, 1, 2, 3], "the region was filled");
-    assert_eq!(&arena[0 .. 4], &[0; 4], "and nothing either side of it was");
-    assert_eq!(&arena[8 .. 12], &[0; 4]);
+    assert_eq!(&arena[4..8], &[0, 1, 2, 3], "the region was filled");
+    assert_eq!(&arena[0..4], &[0; 4], "and nothing either side of it was");
+    assert_eq!(&arena[8..12], &[0; 4]);
 }
 
 #[test]
@@ -61,5 +61,9 @@ fn filling_continues_the_same_sequence_as_taking_one_at_a_time() {
     assert_eq!(fill_rolling_idx(&mut ids), 3);
     assert_eq!(ids, [1, 2, 3]);
 
-    assert_eq!(rolling_idx(), 4, "the fill left the counter where it should be");
+    assert_eq!(
+        rolling_idx(),
+        4,
+        "the fill left the counter where it should be"
+    );
 }
