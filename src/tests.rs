@@ -1,15 +1,23 @@
-//! The rolling index is one global counter, so these tests share state and run under
-//! one lock rather than in parallel.
+//! The rolling index is one global counter, so these tests share state and run
+//! under one lock rather than in parallel.
 //!
-//! The lock is taken by every test, including the ones that panic on purpose, and the
-//! poison is cleared rather than propagated. A panicking test has already failed; there
-//! is nothing for the next test to learn from the poison, and leaving it set would fail
-//! every later test for a reason that has nothing to do with them.
+//! The lock is taken by every test, including the ones that panic on purpose,
+//! and the poison is cleared rather than propagated. A panicking test has
+//! already failed; there is nothing for the next test to learn from the poison,
+//! and leaving it set would fail every later test for a reason that has nothing
+//! to do with them.
 
 #![allow(clippy::unnecessary_cast)] // the width casts are no-ops at exactly one width
 
-use super::*;
+// The crate is `#![no_std]` under that feature, and these tests still want
+// threads, vectors and formatting. Scoped to the test module: nothing the crate
+// ships reaches std.
+extern crate std;
+
 use std::sync::{Mutex, MutexGuard};
+use std::vec::Vec;
+
+use super::*;
 
 static SERIAL: Mutex<()> = Mutex::new(());
 
@@ -19,14 +27,15 @@ fn serial() -> MutexGuard<'static, ()> {
         SERIAL.clear_poison();
         poisoned.into_inner()
     });
-    index::reset();
+    ROLLING_IDX.reset();
     guard
 }
 
 /// How many ids a test may ask for and still expect every one to differ.
 ///
-/// The index wraps when its space is exhausted, so this is capped by the configured
-/// width: `u8_index` holds 256 values, and asking for more cannot give unique ones.
+/// The index wraps when its space is exhausted, so this is capped by the
+/// configured width: `u8_index` holds 256 values, and asking for more cannot
+/// give unique ones.
 #[allow(clippy::unnecessary_cast)] // a no-op at u128_index and load-bearing elsewhere
 fn distinct_budget() -> usize {
     const WANTED: usize = 1000;
@@ -47,8 +56,8 @@ fn two_indices_differ() {
 #[test]
 fn indices_start_at_zero_and_step_by_one() {
     let _g = serial();
-    let taken: Vec<Idx> = (0..8).map(|_| rolling_idx()).collect();
-    let expected: Vec<Idx> = (0..8).collect();
+    let taken: Vec<Idx> = (0 .. 8).map(|_| rolling_idx()).collect();
+    let expected: Vec<Idx> = (0 .. 8).collect();
     assert_eq!(
         taken, expected,
         "the index starts at zero and increases by one, and its value is the count of \
@@ -60,23 +69,30 @@ fn indices_start_at_zero_and_step_by_one() {
 fn a_run_of_indices_is_free_of_repeats() {
     let _g = serial();
     let budget = distinct_budget();
-    let taken: Vec<Idx> = (0..budget).map(|_| rolling_idx()).collect();
+    let taken: Vec<Idx> = (0 .. budget).map(|_| rolling_idx()).collect();
     let mut sorted = taken.clone();
     sorted.sort_unstable();
     sorted.dedup();
-    assert_eq!(sorted.len(), budget, "every index in a run differs from every other");
+    assert_eq!(
+        sorted.len(),
+        budget,
+        "every index in a run differs from every other"
+    );
 }
 
 #[test]
 fn threads_never_receive_the_same_index() {
     let _g = serial();
     let budget = distinct_budget().min(256);
-    // No sleeps: staggering the threads makes a collision less likely to occur, which
-    // is the opposite of what a test for collisions wants. They all start at once and
-    // contend as hard as the machine allows.
+    // No sleeps: staggering the threads makes a collision less likely to occur,
+    // which is the opposite of what a test for collisions wants. They all start
+    // at once and contend as hard as the machine allows.
     let taken: Vec<Idx> = std::thread::scope(|s| {
-        let handles: Vec<_> = (0..budget).map(|_| s.spawn(rolling_idx)).collect();
-        handles.into_iter().map(|h| h.join().expect("no thread panics")).collect()
+        let handles: Vec<_> = (0 .. budget).map(|_| s.spawn(rolling_idx)).collect();
+        handles
+            .into_iter()
+            .map(|h| h.join().expect("no thread panics"))
+            .collect()
     });
     let mut sorted = taken.clone();
     sorted.sort_unstable();
@@ -89,22 +105,46 @@ fn threads_never_receive_the_same_index() {
     );
 }
 
-/// Whether the counter is wider than the index, which is what makes exhaustion visible.
+/// Whether the counter is wider than the index, which is what makes exhaustion
+/// visible.
 ///
-/// The crate's own constant, not a copy of it. A copy asserted against itself agrees
-/// whatever the crate decides, so it passes under the very predicate the tests below
-/// exist to refuse.
-use crate::index::counter::EXHAUSTION_IS_OBSERVABLE;
+/// The crate's own constant, not a copy of it. A copy asserted against itself
+/// agrees whatever the crate decides, so it passes under the very predicate the
+/// tests below exist to refuse.
+const EXHAUSTION_IS_OBSERVABLE: bool = <Idx as Width>::EXHAUSTION_IS_OBSERVABLE;
 
-/// Only where a wider counter is the mechanism. At `u128_index` the constant is true for
-/// a different reason, a flag under the lock, and the width comparison says nothing there.
+/// Places the counter on the last value the width can hand out.
+///
+/// Reaching that point by counting would take longer than the tests have, so
+/// the state is named rather than counted to.
+fn at_last() {
+    ROLLING_IDX.set_next(_ROLLING_IDX_MAX);
+}
+
+/// Places the counter past the last value, which is the exhausted state.
+///
+/// Through the public surface: the last value is handed out like any other, and
+/// it is the call after it that finds the width used up.
+fn exhaust() {
+    at_last();
+    let last = rolling_idx();
+    assert_eq!(
+        last, _ROLLING_IDX_MAX,
+        "the value before exhaustion is the maximum"
+    );
+}
+
+/// Only where a wider counter is the mechanism. At `u128_index` the constant is
+/// true for a different reason, a flag under the lock, and the width comparison
+/// says nothing there.
 #[test]
 #[cfg(not(feature = "u128_index"))]
 fn the_exhaustion_check_follows_the_width_and_not_the_feature_name() {
-    // `usize_index` is 64 bits on this machine and 32 on wasm32 and i686, so a predicate
-    // naming the feature and one measuring the width disagree there. The width is the
-    // question, and this is what says so. Revert the crate's constant to
-    // `cfg!(feature = "usize_index")` and this fails here rather than only on wasm32.
+    // `usize_index` is 64 bits on this machine and 32 on wasm32 and i686, so a
+    // predicate naming the feature and one measuring the width disagree there.
+    // The width is the question, and this is what says so. Revert the crate's
+    // constant to `cfg!(feature = "usize_index")` and this fails here rather
+    // than only on wasm32.
     assert_eq!(
         EXHAUSTION_IS_OBSERVABLE,
         core::mem::size_of::<Idx>() < 8,
@@ -114,17 +154,18 @@ fn the_exhaustion_check_follows_the_width_and_not_the_feature_name() {
 
 /// The property the wide counter is for.
 ///
-/// A counter as narrow as the index wraps to zero when it is exhausted, and a thread
-/// arriving in that window cannot tell a wrapped counter from a fresh one, so it is
-/// handed an index already in use. A wider counter passes the narrow maximum without
-/// wrapping, so exhaustion is visible to every later caller.
+/// A counter as narrow as the index wraps to zero when it is exhausted, and a
+/// thread arriving in that window cannot tell a wrapped counter from a fresh
+/// one, so it is handed an index already in use. A wider counter passes the
+/// narrow maximum without wrapping, so exhaustion is visible to every later
+/// caller.
 #[test]
 #[cfg(feature = "strict")]
 fn the_last_value_of_the_width_is_handed_out() {
     let _g = serial();
     // Start at the end rather than counting all the way there, which for a 64-bit
     // index would not finish.
-    index::at_last();
+    at_last();
     assert_eq!(
         rolling_idx(),
         _ROLLING_IDX_MAX,
@@ -135,10 +176,12 @@ fn the_last_value_of_the_width_is_handed_out() {
 
 /// Runs `f` and reports whether it panicked, without printing the panic.
 ///
-/// `#[should_panic]` cannot say "panics, where the width allows one to be detected", and
-/// which widths those are is not known until `size_of` is evaluated.
+/// `#[should_panic]` cannot say "panics, where the width allows one to be
+/// detected", and which widths those are is not known until `size_of` is
+/// evaluated.
 #[cfg(feature = "strict")]
 fn panicked(f: impl FnOnce() + std::panic::UnwindSafe) -> bool {
+    use std::boxed::Box;
     let previous = std::panic::take_hook();
     std::panic::set_hook(Box::new(|_| {}));
     let outcome = std::panic::catch_unwind(f);
@@ -153,7 +196,7 @@ fn strict_refuses_once_the_width_is_exhausted() {
         return;
     }
     let _g = serial();
-    index::exhaust();
+    exhaust();
     assert!(
         panicked(|| {
             let _ = rolling_idx();
@@ -169,9 +212,9 @@ fn strict_keeps_refusing_after_the_first_refusal() {
         return;
     }
     let _g = serial();
-    index::exhaust();
-    // Well past the end: a same-width counter would have wrapped back into the valid
-    // range by now and handed out a duplicate instead of refusing.
+    exhaust();
+    // Well past the end: a same-width counter would have wrapped back into the
+    // valid range by now and handed out a duplicate instead of refusing.
     assert!(
         panicked(|| {
             let _ = rolling_idx();
@@ -188,19 +231,20 @@ fn without_strict_the_index_wraps_and_repeats() {
     }
     let _g = serial();
     let first = rolling_idx();
-    index::exhaust();
+    exhaust();
     assert_eq!(
         rolling_idx(),
         first,
         "past its maximum the index returns to the start rather than refusing"
     );
+    assert_eq!(rolling_idx(), 1, "and carries on from there");
 }
 
 #[test]
 #[cfg(not(feature = "strict"))]
 fn the_last_value_of_the_width_is_handed_out() {
     let _g = serial();
-    index::at_last();
+    at_last();
     assert_eq!(
         rolling_idx(),
         _ROLLING_IDX_MAX,
@@ -209,28 +253,31 @@ fn the_last_value_of_the_width_is_handed_out() {
     );
 }
 
-// There was a test here asserting `_ROLLING_IDX_MAX == Idx::MAX`, against a definition
-// reading `pub const _ROLLING_IDX_MAX: Idx = Idx::MAX;`. A constant compared to the
-// literal its own definition sets cannot fail, and the shape has a name in this
-// workspace's test gate along with the instruction to delete rather than repair it. What
-// ties the maximum to something the code does is the exhaustion tests above, which place
-// the counter at it and act on what comes back.
+// There was a test here asserting `_ROLLING_IDX_MAX == Idx::MAX`, against a
+// definition reading `pub const _ROLLING_IDX_MAX: Idx = Idx::MAX;`. A constant
+// compared to the literal its own definition sets cannot fail, and the shape
+// has a name in this workspace's test gate along with the instruction to delete
+// rather than repair it. What ties the maximum to something the code does is
+// the exhaustion tests above, which place the counter at it and act on what
+// comes back.
 
 #[cfg(feature = "ruid_type")]
 mod ruid {
-    use super::*;
+    use core::hash::Hash;
     use std::collections::hash_map::DefaultHasher;
-    use std::hash::{Hash, Hasher};
+
+    use super::*;
     use crate::{Derived, Provenance, Rolled};
 
     fn hash_of<P: Provenance>(id: &RUID<P>) -> u64 {
+        use core::hash::Hasher;
         let mut h = DefaultHasher::new();
         id.hash(&mut h);
         h.finish()
     }
 
-    /// A derived id built from a known value, which is the only way to get a predictable
-    /// one to assert against.
+    /// A derived id built from a known value, which is the only way to get a
+    /// predictable one to assert against.
     fn derived(value: u8) -> RUID<Derived> {
         RUID::<Derived>::from(value as Idx)
     }
@@ -254,7 +301,11 @@ mod ruid {
         let rolled = RUID::new();
         let value = rolled.get();
         let derived: RUID<Derived> = rolled.into_derived();
-        assert_eq!(derived.get(), value, "demoting forgets the guarantee, not the value");
+        assert_eq!(
+            derived.get(),
+            value,
+            "demoting forgets the guarantee, not the value"
+        );
         assert!(!derived.is_rolled());
     }
 
@@ -263,8 +314,11 @@ mod ruid {
         let _g = serial();
         let budget = distinct_budget().min(256);
         let taken: Vec<RUID<Rolled>> = std::thread::scope(|s| {
-            let handles: Vec<_> = (0..budget).map(|_| s.spawn(RUID::new)).collect();
-            handles.into_iter().map(|h| h.join().expect("no thread panics")).collect()
+            let handles: Vec<_> = (0 .. budget).map(|_| s.spawn(RUID::new)).collect();
+            handles
+                .into_iter()
+                .map(|h| h.join().expect("no thread panics"))
+                .collect()
         });
         let mut values: Vec<Idx> = taken.iter().map(RUID::get).collect();
         values.sort_unstable();
@@ -276,7 +330,11 @@ mod ruid {
     fn reading_a_ruid_twice_gives_the_same_answer() {
         let _g = serial();
         let id = RUID::new();
-        assert_eq!(id.get(), id.get(), "a RUID holds an index, it does not take one per read");
+        assert_eq!(
+            id.get(),
+            id.get(),
+            "a RUID holds an index, it does not take one per read"
+        );
     }
 
     #[test]
@@ -296,7 +354,10 @@ mod ruid {
         let _g = serial();
         let first = RUID::new();
         let second = RUID::new();
-        assert!(first < second, "ids are ordered the way the indices they hold are");
+        assert!(
+            first < second,
+            "ids are ordered the way the indices they hold are"
+        );
         assert_eq!(first.cmp(&second), first.get().cmp(&second.get()));
     }
 
@@ -305,7 +366,10 @@ mod ruid {
         let _g = serial();
         let rolled = RUID::new();
         let same_value = derived(rolled.get() as u8);
-        assert_eq!(rolled, same_value, "two ids naming the same thing are the same id");
+        assert_eq!(
+            rolled, same_value,
+            "two ids naming the same thing are the same id"
+        );
         assert_eq!(
             hash_of(&rolled),
             hash_of(&same_value),
@@ -325,6 +389,7 @@ mod ruid {
     fn formatting_delegates_to_the_integer() {
         let _g = serial();
         let id = derived(200);
+        use std::format;
         assert_eq!(format!("{id}"), "200");
         assert_eq!(format!("{id:?}"), "RUID(200)");
         assert_eq!(format!("{id:x}"), "c8");
@@ -358,7 +423,10 @@ mod ruid {
         let _g = serial();
         let a = RUID::default();
         let b = RUID::default();
-        assert_ne!(a, b, "a defaulted RUID is a real id, not a zero placeholder");
+        assert_ne!(
+            a, b,
+            "a defaulted RUID is a real id, not a zero placeholder"
+        );
         assert!(a.is_rolled());
     }
 
@@ -371,10 +439,11 @@ mod ruid {
         assert!(id < 6);
     }
 
-    // Both operator families are exercised on purpose. Whether `RUID` is `Copy` depends
-    // on the `const` feature, so the by-value form is the natural one for a caller in one
-    // configuration and impossible in the other, and only running both proves they agree.
-    // Clippy sees one configuration at a time and reads the redundancy as waste.
+    // Both operator families are exercised on purpose. Whether `RUID` is `Copy`
+    // depends on the `const` feature, so the by-value form is the natural one
+    // for a caller in one configuration and impossible in the other, and only
+    // running both proves they agree. Clippy sees one configuration at a time
+    // and reads the redundancy as waste.
     #[allow(clippy::clone_on_copy, clippy::op_ref)]
     #[test]
     #[cfg(feature = "allow_arithmetics")]
@@ -423,7 +492,11 @@ mod ruid {
     fn assigning_arithmetic_matches_its_operator() {
         let _g = serial();
         for (name, apply, expected) in [
-            ("add", (|x: &mut RUID<Derived>| *x += 3 as Idx) as fn(&mut RUID<Derived>), 13 as Idx),
+            (
+                "add",
+                (|x: &mut RUID<Derived>| *x += 3 as Idx) as fn(&mut RUID<Derived>),
+                13 as Idx,
+            ),
             ("sub", |x: &mut RUID<Derived>| *x -= 3 as Idx, 7),
             ("mul", |x: &mut RUID<Derived>| *x *= 3 as Idx, 30),
             ("div", |x: &mut RUID<Derived>| *x /= 3 as Idx, 3),
@@ -447,8 +520,9 @@ mod ruid {
         assert_eq!(*id.as_ref(), 4 as Idx);
     }
 
-    /// The point of the `const` feature: a `RUID` can be built where a constant is
-    /// required. It holds no index at that point, because a `const fn` cannot take one.
+    /// The point of the `const` feature: a `RUID` can be built where a constant
+    /// is required. It holds no index at that point, because a `const fn`
+    /// cannot take one.
     #[cfg(feature = "const")]
     mod constructed_at_compile_time {
         use super::*;
@@ -463,12 +537,44 @@ mod ruid {
             assert_eq!(first, second, "the index is taken once and kept");
         }
 
+        /// A fill that panics leaves the cell fillable rather than stuck.
+        ///
+        /// Under `strict` the counter panics when it is exhausted, and the
+        /// first read of a `const` `RUID` is what asks it. Left
+        /// half-filled, every later read of that id would wait forever
+        /// for a fill that is never coming; instead the state goes back
+        /// to empty and a later read, after a reset, gets an id.
+        #[test]
+        #[cfg(feature = "strict")]
+        fn a_read_that_panics_while_filling_leaves_the_cell_fillable() {
+            if !EXHAUSTION_IS_OBSERVABLE {
+                return;
+            }
+            let _g = serial();
+            let id = RUID::new();
+            exhaust();
+            assert!(panicked(|| {
+                let _ = id.get();
+            }));
+            ROLLING_IDX.reset();
+            assert_eq!(
+                id.get(),
+                0,
+                "the fill is retried, and this time it completes"
+            );
+            assert_eq!(id.get(), 0, "and it is kept");
+        }
+
         #[test]
         fn cloning_carries_the_id_rather_than_taking_a_new_one() {
             let _g = serial();
             let original = RUID::new();
             let copy = original.clone();
-            assert_eq!(original.get(), copy.get(), "a clone is the same id, not the next one");
+            assert_eq!(
+                original.get(),
+                copy.get(),
+                "a clone is the same id, not the next one"
+            );
         }
     }
 }

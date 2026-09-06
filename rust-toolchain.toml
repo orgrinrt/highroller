@@ -1,3 +1,15 @@
+# The workspace nightly, not the MSRV, and not a floating channel.
+#
+# `rustfmt.toml` here sets thirty-odd options that only nightly rustfmt accepts, so under
+# stable `cargo fmt` refuses the config and formats to defaults instead, which is the
+# repository silently not applying its own style. A floating channel drifts between
+# checkouts, so the date is written down. This is the same pin every other repository in
+# the workspace carries.
+#
+# The minimum is declared in `Cargo.toml` as `rust-version` and is checked by
+# `tests/feature_matrix.rs`, which builds the default selection under it where that
+# toolchain is installed. The declaration is a claim about consumers' compilers; the pin
+# is about which compiler this repository's own checks run under.
 [toolchain]
-#channel = "nightly"
-channel = "stable"
+channel = "nightly-2026-05-28"
+components = ["rustfmt", "clippy", "rust-src"]

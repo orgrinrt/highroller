@@ -2,8 +2,10 @@
 name = "highroller"
 version = "0.1.1"
 edition = "2021"
-# Verified by building every feature shape under 1.70.0. OnceLock, which the `const`
-# feature is built on, is what sets the floor.
+# `OnceLock`, which the `const` feature keeps under `std`, is what sets the floor.
+# `tests/feature_matrix.rs` builds the default selection under it where that toolchain is
+# installed; the repository's own pin is the workspace nightly, which `rust-toolchain.toml`
+# explains.
 rust-version = "1.70"
 description = """
 A simple, high-level rolling index that is thread-safe and guarantees cheap runtime-unique IDs.
@@ -34,10 +36,10 @@ u32_index = []
 u64_index = []
 u128_index = []
 usize_index = []
-# The crate's own code is `core` only, so this is the attribute and nothing else. It is
-# incompatible with `const` (which keeps a `OnceLock`) and with `u128_index` (which has no
-# atomic to sit in and keeps a `Mutex`); both say so at compile time rather than failing
-# deep inside `core`.
+# The crate's own code is `core` only, so this is the attribute and nothing else. Two
+# things change shape under it and neither changes behaviour: the lock `u128_index` keeps
+# is a spin lock rather than a `Mutex`, and the cell `const` fills on first read is a state
+# byte rather than a `OnceLock`.
 no_std = []
 # Nothing here allocates under any configuration, so this feature does not remove
 # allocation: it declares its absence and brings in the contract for handing storage the
@@ -45,6 +47,9 @@ no_std = []
 no_alloc = ["no_std", "dep:notko"]
 
 # actual features
+# Refuse with a panic once the width is used up, rather than wrapping. Also withholds
+# comparison and arithmetic between `RUID` and a bare integer, which is a second meaning
+# the readme names as a wart.
 strict = []
 ruid_type = []
 allow_arithmetics = []

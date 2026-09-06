@@ -1,8 +1,9 @@
 //! A pool that hands out identified slots, composing most of the crate at once.
 //!
-//! Four things together: a counter of its own so the pool does not share the crate's,
-//! `RUID`'s provenance so a slot's id cannot be forged, storage the caller lends rather
-//! than the pool allocating, and a batch fill so reserving a run of ids costs one call.
+//! Four things together: a counter of its own so the pool does not share the
+//! crate's, `RUID`'s provenance so a slot's id cannot be forged, storage the
+//! caller lends rather than the pool allocating, and a batch fill so reserving
+//! a run of ids costs one call.
 //!
 //! ```text
 //! cargo run --example id_pool --no-default-features --features u32_index,ruid_type,no_alloc
@@ -17,11 +18,11 @@ mod pool_ids {
 
 /// Slots handed out of storage the caller owns.
 ///
-/// The pool allocates nothing. It is lent a region and fills it, which is what lets the
-/// same code serve a stack array, a slice out of an arena, and a region from an allocator
-/// the caller already holds.
+/// The pool allocates nothing. It is lent a region and fills it, which is what
+/// lets the same code serve a stack array, a slice out of an arena, and a
+/// region from an allocator the caller already holds.
 struct Pool<'a> {
-    slots: &'a mut [Idx],
+    slots:      &'a mut [Idx],
     handed_out: usize,
 }
 
@@ -30,7 +31,10 @@ impl<'a> Pool<'a> {
     fn new(storage: &'a mut [Idx]) -> Self {
         let filled = fill_rolling_idx(storage);
         println!("reserved {filled} ids in one call");
-        Self { slots: storage, handed_out: 0 }
+        Self {
+            slots:      storage,
+            handed_out: 0,
+        }
     }
 
     /// The next reserved id, if any are left.
@@ -59,7 +63,8 @@ fn main() {
     }
     println!("pool drained, {} left", pool.remaining());
 
-    // The pool's own counter is untouched by any of that: it is a different counter.
+    // The pool's own counter is untouched by any of that: it is a different
+    // counter.
     println!("pool's own first id: {}", pool_ids::rolling_idx());
 
     // And an id the crate's counter issued carries its provenance in its type, so a
@@ -67,5 +72,8 @@ fn main() {
     let issued: RUID<Rolled> = RUID::new();
     let computed: RUID<Derived> = issued.into();
     println!("issued {issued} is rolled: {}", issued.is_rolled());
-    println!("the same value as derived {computed} is rolled: {}", computed.is_rolled());
+    println!(
+        "the same value as derived {computed} is rolled: {}",
+        computed.is_rolled()
+    );
 }

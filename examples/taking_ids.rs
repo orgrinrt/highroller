@@ -7,12 +7,12 @@
 use highroller::{reset_rolling_idx, rolling_idx, _ROLLING_IDX_MAX};
 
 fn main() {
-    // The maximum rather than the count: the count is the maximum plus one, which at the
-    // widest index is one past what that type can hold.
+    // The maximum rather than the count: the count is the maximum plus one, which
+    // at the widest index is one past what that type can hold.
     println!("this build's index runs to {_ROLLING_IDX_MAX}");
 
-    // Ephemeral and specific to one run. It starts at zero every time the process does,
-    // and it is not stored anywhere.
+    // Ephemeral and specific to one run. It starts at zero every time the process
+    // does, and it is not stored anywhere.
     let first = rolling_idx();
     let second = rolling_idx();
     println!("took {first}, then {second}");

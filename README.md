@@ -42,8 +42,9 @@ mutex, and under real contention it is barely better than one, because every thr
 loses the race retries and the retries become the work.
 
 `u128_index` is the exception and keeps a lock, because there is no 128-bit atomic to put
-a counter in. It is also the width nobody needs: a program exhausting a 64-bit index at
-one per nanosecond has been running for five hundred years.
+a counter in: a `Mutex` under `std`, a spin lock under `no_std`. It is also the width nobody
+needs: a program exhausting a 64-bit index at one per nanosecond has been running for five
+hundred years.
 
 ### Feature Flags
 
@@ -53,6 +54,8 @@ one per nanosecond has been running for five hundred years.
 | `ruid_type`            | *Disabled*  | Enables `RUID`, a type of its own over the rolling index.                                                                                                              |
 | `allow_arithmetics`    | *Disabled*  | Arithmetic operators on `RUID`, by value and by reference.                                                                                                             |
 | `const`                | *Disabled*  | Makes `RUID::new()` a `const fn`. The index is taken on first read instead, so `RUID` is not `Copy` and has no `Deref` under this flag.                                 |
+| `no_std`               | *Disabled*  | Sets `#![no_std]`. The crate is `core` only at every width and under every other flag, so this changes what the two locks are made of and nothing a caller can see.    |
+| `no_alloc`             | *Disabled*  | Adds `fill_rolling_idx`, which takes a run of ids into storage the caller lends. Implies `no_std`, and brings in notko for the lending contract.                       |
 | `async`                | *Disabled*  | Kept so that naming it is not an error. It gates nothing: `RUID` is `Send` and `Sync` on its own, and the crate asserts so at compile time.                             |
 | size (separate flags)  | `u16_index` | The width of the index: `u8_index`, `u16_index`, `u32_index`, `u64_index`, `u128_index`, `usize_index`                                                                 |
 
@@ -75,7 +78,12 @@ are caught at compile time with a message saying which one happened. The same co
 is why `cargo build --all-features` cannot work on this crate.
 
 The chosen width is also exported as `highroller::Idx`, so code that stores an id can name
-its type without repeating the choice.
+its type without repeating the choice, and the counter itself as `highroller::ROLLING_IDX`,
+for the one thing the functions do not cover: `ROLLING_IDX.set_next(id)` places it, which is
+how a program that persisted its last id carries on from there after a restart.
+
+`no_alloc` is a git dependency on notko, which is not on crates.io yet, so a build carrying
+that flag comes from the repository rather than the registry for now.
 
 ### RUID
 
@@ -146,6 +154,48 @@ println!("The ultimate champion is fighter with id: {}", ultimate_champion.id);
 Every fighter gets a distinct id, from four threads at once, without any of the machinery
 a UUID would bring. The index resets when the program does, so anything that has to
 survive a restart needs a different tool.
+
+## Your own counters
+
+The crate's counter is one counter at one width, and the width is a cargo feature. A feature
+is chosen once for a whole build graph, so it cannot give a program two counters, and it
+cannot give a library one that its consumer did not agree to. `Counter` is the type under
+the crate's own, and it goes wherever a value goes:
+
+```rust
+use highroller::{Counter, Refuse};
+
+// In a static, refusing rather than repeating, at a width of its own.
+static TICKETS: Counter<u16, Refuse> = Counter::new();
+
+// Or inside a value. The policy defaults to wrapping.
+struct Arena { ids: Counter<u8> }
+
+let arena = Arena { ids: Counter::new() };
+assert_eq!(TICKETS.next(), 0);
+assert_eq!(arena.ids.next(), 0);
+assert_eq!(arena.ids.next(), 1);
+```
+
+`declare_rolling_idx!` is the same thing as a module: it expands to the static and the three
+names the crate itself exports, so a module holding one reads like the crate does.
+
+```rust
+mod tickets {
+    highroller::declare_rolling_idx!(u16);
+}
+mod handles {
+    // the policy is named at the invocation, since a macro cannot read the caller's features
+    highroller::declare_rolling_idx!(u8, strict);
+}
+
+assert_eq!(tickets::rolling_idx(), 0);
+assert_eq!(handles::rolling_idx(), 0);
+assert!(handles::ROLLING_IDX.refuses());
+```
+
+Every width the size flags offer is a `Counter` width, `u128` included, and each costs what
+the table above says it costs.
 
 ## Running out
 
@@ -239,7 +289,9 @@ A `const fn` cannot take an index, so the value starts unassigned and takes one 
 read. That needs somewhere to write the result, which costs two things: `RUID` is not
 `Copy` and does not implement `Deref`. Use `get()`, and the reference forms of the
 operators (`&a + &b`) where a value is needed twice. The lazy assignment is thread-safe, so
-a `RUID` shared between threads resolves to one index for all of them.
+a `RUID` shared between threads resolves to one index for all of them: a `OnceLock` under
+`std`, and under `no_std` a state byte the losing thread spins on for the length of one
+atomic add.
 
 ## Installation
 
